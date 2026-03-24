@@ -192,6 +192,7 @@ pub enum DebugResponse {
 /// Message wrapper for the protocol
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebugMessage {
+    /// Correlation id used to match a response to the originating request.
     pub id: u64,
     pub request: Option<DebugRequest>,
     pub response: Option<DebugResponse>,
@@ -212,5 +213,9 @@ impl DebugMessage {
             request: None,
             response: Some(response),
         }
+    }
+
+    pub fn is_response_for(&self, expected_id: u64) -> bool {
+        self.id == expected_id && self.response.is_some()
     }
 }

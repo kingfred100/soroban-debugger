@@ -6,7 +6,7 @@ use tracing::info;
 
 /// Remote client for connecting to a debug server
 pub struct RemoteClient {
-    stream: TcpStream,
+    stream: BufReader<TcpStream>,
     message_id: u64,
     authenticated: bool,
 }
@@ -20,7 +20,7 @@ impl RemoteClient {
         })?;
 
         let mut client = Self {
-            stream,
+            stream: BufReader::new(stream),
             message_id: 0,
             authenticated: token.is_none(),
         };
@@ -366,37 +366,75 @@ impl RemoteClient {
         }
 
         self.message_id += 1;
-        let message = DebugMessage::request(self.message_id, request);
+        let expected_id = self.message_id;
+        let message = DebugMessage::request(expected_id, request);
 
         let request_json = serde_json::to_string(&message)
             .map_err(|e| DebuggerError::FileError(format!("Failed to serialize request: {}", e)))?;
 
         // Send request
-        writeln!(self.stream, "{}", request_json)
+        writeln!(self.stream.get_mut(), "{}", request_json)
             .map_err(|e| DebuggerError::FileError(format!("Failed to write to stream: {}", e)))?;
         self.stream
+            .get_mut()
             .flush()
             .map_err(|e| DebuggerError::FileError(format!("Failed to flush stream: {}", e)))?;
 
         // Read response
-        let reader = BufReader::new(&self.stream);
-        let mut lines = reader.lines();
-        let response_line = lines
-            .next()
-            .ok_or_else(|| DebuggerError::FileError("No response from server".to_string()))?
+        let mut response_line = String::new();
+        let n = self
+            .stream
+            .read_line(&mut response_line)
             .map_err(|e| DebuggerError::FileError(format!("Failed to read response: {}", e)))?;
+        if n == 0 {
+            return Err(DebuggerError::FileError("No response from server".to_string()).into());
+        }
 
-        let response_message: DebugMessage = serde_json::from_str(&response_line)
-            .map_err(|e| DebuggerError::FileError(format!("Failed to parse response: {}", e)))?;
-
-        response_message.response.ok_or_else(|| {
-            DebuggerError::FileError("Response message has no response field".to_string()).into()
-        })
+        parse_response_line(expected_id, response_line.trim_end())
     }
+}
+
+fn parse_response_line(expected_id: u64, response_line: &str) -> Result<DebugResponse> {
+    let response_message: DebugMessage = serde_json::from_str(response_line)
+        .map_err(|e| DebuggerError::FileError(format!("Failed to parse response: {}", e)))?;
+
+    if response_message.id != expected_id {
+        return Err(DebuggerError::ExecutionError(format!(
+            "Mismatched response id: expected {} got {}",
+            expected_id, response_message.id
+        ))
+        .into());
+    }
+
+    response_message.response.ok_or_else(|| {
+        DebuggerError::FileError("Response message has no response field".to_string()).into()
+    })
 }
 
 impl Drop for RemoteClient {
     fn drop(&mut self) {
         let _ = self.disconnect();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::server::protocol::DebugResponse;
+
+    #[test]
+    fn parse_response_line_rejects_mismatched_ids() {
+        let msg = DebugMessage::response(42, DebugResponse::Pong);
+        let line = serde_json::to_string(&msg).unwrap();
+        let err = parse_response_line(7, &line).unwrap_err();
+        assert!(err.to_string().contains("Mismatched response id"));
+    }
+
+    #[test]
+    fn parse_response_line_accepts_matching_ids() {
+        let msg = DebugMessage::response(7, DebugResponse::Pong);
+        let line = serde_json::to_string(&msg).unwrap();
+        let resp = parse_response_line(7, &line).unwrap();
+        assert!(matches!(resp, DebugResponse::Pong));
     }
 }
