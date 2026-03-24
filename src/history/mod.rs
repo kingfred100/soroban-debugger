@@ -421,6 +421,8 @@ mod tests {
         }
     }
 
+
+
     // ── load_history — corrupt file tests (the requested verification) ───────
 
     /// A file containing invalid JSON must return `Err`, never `Ok(vec![])`.

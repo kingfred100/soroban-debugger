@@ -156,6 +156,7 @@ impl SymbolicAnalyzer {
                         })?);
                     }
                 }
+
                 Payload::ExportSection(reader) => {
                     for export in reader {
                         let export = export.map_err(|e| {
