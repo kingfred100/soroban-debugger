@@ -88,6 +88,12 @@ pub enum DebugRequest {
     /// Load network snapshot
     LoadSnapshot { snapshot_path: String },
 
+    /// Evaluate an expression in the current debug context
+    Evaluate {
+        expression: String,
+        frame_id: Option<u64>,
+    },
+
     /// Ping to check connection
     Ping,
 
@@ -168,6 +174,13 @@ pub enum DebugResponse {
 
     /// Error response
     Error { message: String },
+
+    /// Evaluation result
+    EvaluateResult {
+        result: String,
+        result_type: Option<String>,
+        variables_reference: u64,
+    },
 
     /// Pong response
     Pong,
