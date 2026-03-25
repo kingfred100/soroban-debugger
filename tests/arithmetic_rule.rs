@@ -27,9 +27,7 @@ fn wasm_with_single_i32_function(param_count: u8, locals: &[(u32, u8)], ops: &[u
     let mut module = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
 
     let mut type_section = vec![0x01, 0x60, param_count];
-    for _ in 0..param_count {
-        type_section.push(0x7f);
-    }
+    type_section.extend(std::iter::repeat_n(0x7f, param_count as usize));
     type_section.push(0x00);
     push_section(&mut module, 0x01, type_section);
 
