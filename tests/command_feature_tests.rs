@@ -64,7 +64,7 @@ fn symbolic_writes_scenario_toml() {
 
 #[test]
 fn symbolic_cli_honors_caps_and_reports_truncation() {
-    let wasm = fixture_wasm("counter");
+    let wasm = fixture_wasm("budget_heavy");
 
     base_cmd()
         .args([
@@ -72,7 +72,7 @@ fn symbolic_cli_honors_caps_and_reports_truncation() {
             "--contract",
             wasm.to_str().unwrap(),
             "--function",
-            "increment",
+            "heavy",
             "--profile",
             "fast",
             "--input-combination-cap",
@@ -84,7 +84,9 @@ fn symbolic_cli_honors_caps_and_reports_truncation() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Budget: path_cap=2, input_combination_cap=4, timeout=30s"))
+        .stdout(predicate::str::contains(
+            "Budget: path_cap=2, input_combination_cap=4, timeout=30s",
+        ))
         .stdout(predicate::str::contains("Truncation:"))
         .stdout(predicate::str::contains("input combination cap reached"))
         .stdout(predicate::str::contains("path exploration cap reached"));

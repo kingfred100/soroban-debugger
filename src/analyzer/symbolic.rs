@@ -128,7 +128,8 @@ impl SymbolicAnalyzer {
         config: &SymbolicConfig,
     ) -> Result<SymbolicReport> {
         let arg_count = self.get_arg_count(wasm, function).unwrap_or(0);
-        let generated_inputs = self.generate_input_combinations(arg_count, config.max_input_combinations);
+        let generated_inputs =
+            self.generate_input_combinations(arg_count, config.max_input_combinations);
         let deadline = Instant::now();
 
         let mut report = SymbolicReport {
@@ -412,7 +413,12 @@ impl SymbolicAnalyzer {
             report.metadata.config.max_input_combinations
         )
         .unwrap();
-        writeln!(toml, "timeout_secs = {}", report.metadata.config.timeout_secs).unwrap();
+        writeln!(
+            toml,
+            "timeout_secs = {}",
+            report.metadata.config.timeout_secs
+        )
+        .unwrap();
         writeln!(
             toml,
             "generated_input_combinations = {}",
@@ -684,7 +690,9 @@ mod tests {
                 truncated_by_input_cap: true,
                 truncated_by_path_cap: false,
                 truncated_by_timeout: false,
-                truncation_reasons: vec!["input combination cap reached at 64 generated combinations".to_string()],
+                truncation_reasons: vec![
+                    "input combination cap reached at 64 generated combinations".to_string(),
+                ],
             },
         };
 

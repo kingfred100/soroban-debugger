@@ -1,7 +1,9 @@
-use crate::debugger::engine::{DebuggerEngine, StepOverResult};
 use crate::debugger::breakpoint::{BreakpointManager, BreakpointSpec};
-use crate::server::protocol::{negotiate_protocol_version, PROTOCOL_MAX_VERSION, PROTOCOL_MIN_VERSION};
+use crate::debugger::engine::{DebuggerEngine, StepOverResult};
 use crate::inspector::budget::BudgetInspector;
+use crate::server::protocol::{
+    negotiate_protocol_version, PROTOCOL_MAX_VERSION, PROTOCOL_MIN_VERSION,
+};
 use crate::server::protocol::{
     BreakpointCapabilities, BreakpointDescriptor, DebugMessage, DebugRequest, DebugResponse,
 };
@@ -250,10 +252,11 @@ impl DebugServer {
                 DebugRequest::Execute { function, args } => match self.engine.as_mut() {
                     Some(engine) if engine.breakpoints().should_break(&function) => {
                         match current_storage(engine) {
-                            Ok(storage) => match engine
-                                .breakpoints_mut()
-                                .on_hit(&function, &storage, args.as_deref())
-                            {
+                            Ok(storage) => match engine.breakpoints_mut().on_hit(
+                                &function,
+                                &storage,
+                                args.as_deref(),
+                            ) {
                                 Ok(Some(hit)) => {
                                     for message in hit.log_messages {
                                         println!("{message}");
@@ -566,7 +569,8 @@ impl DebugServer {
                 } => match self.engine.as_mut() {
                     Some(engine) => {
                         let condition = match condition {
-                            Some(condition) => match BreakpointManager::parse_condition(&condition) {
+                            Some(condition) => match BreakpointManager::parse_condition(&condition)
+                            {
                                 Ok(condition) => Some(condition),
                                 Err(e) => {
                                     let response = DebugMessage::response(
@@ -841,9 +845,7 @@ fn summarize_request(request: &DebugRequest) -> String {
             "Authenticate {{ token: <redacted:{} chars> }}",
             token.chars().count()
         ),
-        DebugRequest::SetStorage { .. } => {
-            "SetStorage { storage_json: <redacted> }".to_string()
-        }
+        DebugRequest::SetStorage { .. } => "SetStorage { storage_json: <redacted> }".to_string(),
         _ => format!("{request:?}"),
     }
 }

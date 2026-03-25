@@ -227,10 +227,16 @@ impl ReplSession {
                 print!("\x1B[2J\x1B[1;1H");
                 Ok(false)
             }
-            ReplCommand::Break { function, condition } => {
+            ReplCommand::Break {
+                function,
+                condition,
+            } => {
                 self.executor
                     .add_breakpoint(&function, condition.as_deref())?;
-                tracing::info!("{}", Formatter::success(format!("Breakpoint set: {}", function).as_str()));
+                tracing::info!(
+                    "{}",
+                    Formatter::success(format!("Breakpoint set: {}", function).as_str())
+                );
                 Ok(false)
             }
             ReplCommand::ListBreaks => {
@@ -251,9 +257,15 @@ impl ReplSession {
             }
             ReplCommand::ClearBreak { function } => {
                 if self.executor.remove_breakpoint(&function) {
-                    tracing::info!("{}", Formatter::success(format!("Breakpoint cleared: {}", function).as_str()));
+                    tracing::info!(
+                        "{}",
+                        Formatter::success(format!("Breakpoint cleared: {}", function).as_str())
+                    );
                 } else {
-                    tracing::info!("{}", Formatter::info(format!("No breakpoint found: {}", function).as_str()));
+                    tracing::info!(
+                        "{}",
+                        Formatter::info(format!("No breakpoint found: {}", function).as_str())
+                    );
                 }
                 Ok(false)
             }

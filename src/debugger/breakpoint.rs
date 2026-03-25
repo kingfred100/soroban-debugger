@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Represents a single breakpoint with optional conditions and logging
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,7 +108,8 @@ impl BreakpointManager {
 
     /// Add or update a breakpoint
     pub fn set(&mut self, breakpoint: Breakpoint) {
-        self.breakpoints.insert(breakpoint.function.clone(), breakpoint);
+        self.breakpoints
+            .insert(breakpoint.function.clone(), breakpoint);
     }
 
     /// Add a simple breakpoint at a function name (backward compatibility)
@@ -274,9 +275,11 @@ impl BreakpointManager {
 
         // Basic syntax validation - check for supported operators
         if !contains_comparison_operator(s) {
-            return Err(crate::DebuggerError::BreakpointError(
-                format!("Invalid condition '{}': must contain a comparison operator (==, !=, <, >, <=, >=)", s)
-            ).into());
+            return Err(crate::DebuggerError::BreakpointError(format!(
+                "Invalid condition '{}': must contain a comparison operator (==, !=, <, >, <=, >=)",
+                s
+            ))
+            .into());
         }
 
         // Additional validation could be added here
@@ -295,12 +298,10 @@ impl BreakpointManager {
 
         // Validate hit condition format
         if !is_valid_hit_condition(s) {
-            return Err(crate::DebuggerError::BreakpointError(
-                format!(
-                    "Invalid hit condition '{}': must be number, >N, >=N, ==N, <N, <=N, or %N==0",
-                    s
-                )
-            )
+            return Err(crate::DebuggerError::BreakpointError(format!(
+                "Invalid hit condition '{}': must be number, >N, >=N, ==N, <N, <=N, or %N==0",
+                s
+            ))
             .into());
         }
 
@@ -325,35 +326,50 @@ fn evaluate_hit_condition(hit_condition: &str, hit_count: usize) -> crate::Resul
     // Format: >N, >=N, ==N, <N, <=N, %N==0, or just N (equivalent to >=N)
     if let Some(stripped) = hit_condition.strip_prefix(">=") {
         let n: usize = stripped.trim().parse().map_err(|_| {
-            crate::DebuggerError::BreakpointError(format!("Invalid number in hit condition: {}", stripped))
+            crate::DebuggerError::BreakpointError(format!(
+                "Invalid number in hit condition: {}",
+                stripped
+            ))
         })?;
         return Ok(hit_count >= n);
     }
 
     if let Some(stripped) = hit_condition.strip_prefix('>') {
         let n: usize = stripped.trim().parse().map_err(|_| {
-            crate::DebuggerError::BreakpointError(format!("Invalid number in hit condition: {}", stripped))
+            crate::DebuggerError::BreakpointError(format!(
+                "Invalid number in hit condition: {}",
+                stripped
+            ))
         })?;
         return Ok(hit_count > n);
     }
 
     if let Some(stripped) = hit_condition.strip_prefix("==") {
         let n: usize = stripped.trim().parse().map_err(|_| {
-            crate::DebuggerError::BreakpointError(format!("Invalid number in hit condition: {}", stripped))
+            crate::DebuggerError::BreakpointError(format!(
+                "Invalid number in hit condition: {}",
+                stripped
+            ))
         })?;
         return Ok(hit_count == n);
     }
 
     if let Some(stripped) = hit_condition.strip_prefix("<=") {
         let n: usize = stripped.trim().parse().map_err(|_| {
-            crate::DebuggerError::BreakpointError(format!("Invalid number in hit condition: {}", stripped))
+            crate::DebuggerError::BreakpointError(format!(
+                "Invalid number in hit condition: {}",
+                stripped
+            ))
         })?;
         return Ok(hit_count <= n);
     }
 
     if let Some(stripped) = hit_condition.strip_prefix('<') {
         let n: usize = stripped.trim().parse().map_err(|_| {
-            crate::DebuggerError::BreakpointError(format!("Invalid number in hit condition: {}", stripped))
+            crate::DebuggerError::BreakpointError(format!(
+                "Invalid number in hit condition: {}",
+                stripped
+            ))
         })?;
         return Ok(hit_count < n);
     }
@@ -365,15 +381,22 @@ fn evaluate_hit_condition(hit_condition: &str, hit_count: usize) -> crate::Resul
             let rest: Vec<&str> = parts[1].split("==").collect();
             if rest.len() == 2 {
                 let n: usize = rest[0].trim().parse().map_err(|_| {
-                    crate::DebuggerError::BreakpointError(format!("Invalid modulo in hit condition: {}", rest[0]))
+                    crate::DebuggerError::BreakpointError(format!(
+                        "Invalid modulo in hit condition: {}",
+                        rest[0]
+                    ))
                 })?;
                 let expected: usize = rest[1].trim().parse().map_err(|_| {
-                    crate::DebuggerError::BreakpointError(format!("Invalid value in hit condition: {}", rest[1]))
+                    crate::DebuggerError::BreakpointError(format!(
+                        "Invalid value in hit condition: {}",
+                        rest[1]
+                    ))
                 })?;
                 if n == 0 {
                     return Err(crate::DebuggerError::BreakpointError(
-                        "Modulo cannot be zero".to_string()
-                    ).into());
+                        "Modulo cannot be zero".to_string(),
+                    )
+                    .into());
                 }
                 return Ok((hit_count % n) == expected);
             }
@@ -394,25 +417,33 @@ fn evaluate_hit_condition(hit_condition: &str, hit_count: usize) -> crate::Resul
 
 /// Check if a string contains a comparison operator
 fn contains_comparison_operator(s: &str) -> bool {
-    s.contains(">=") || s.contains("<=") || s.contains("==") || s.contains("!=")
-        || s.contains('>') || s.contains('<')
+    s.contains(">=")
+        || s.contains("<=")
+        || s.contains("==")
+        || s.contains("!=")
+        || s.contains('>')
+        || s.contains('<')
 }
 
 /// Validate hit condition format
 fn is_valid_hit_condition(s: &str) -> bool {
     let s = s.trim();
-    
+
     // Check various valid formats
-    if s.starts_with(">=") || s.starts_with('>') 
-        || s.starts_with("==") || s.starts_with("<=") || s.starts_with('<') {
+    if s.starts_with(">=")
+        || s.starts_with('>')
+        || s.starts_with("==")
+        || s.starts_with("<=")
+        || s.starts_with('<')
+    {
         return true;
     }
-    
+
     // Check modulo format
     if s.contains('%') && s.contains("==") {
         return true;
     }
-    
+
     // Check if it's just a number
     s.parse::<usize>().is_ok()
 }
@@ -448,7 +479,7 @@ mod tests {
         fn evaluate(&self, condition: &str) -> crate::Result<bool> {
             // Simple parser for "variable operator value"
             let condition = condition.trim();
-            
+
             // Find operator
             let (var, op, value_str) = if let Some(pos) = condition.find(">=") {
                 let (var, rest) = condition.split_at(pos);
@@ -469,20 +500,20 @@ mod tests {
                 let (var, rest) = condition.split_at(pos);
                 (var.trim(), "<", rest[1..].trim())
             } else {
-                return Err(crate::DebuggerError::BreakpointError(
-                    format!("No operator found in condition: {}", condition)
-                ).into());
+                return Err(crate::DebuggerError::BreakpointError(format!(
+                    "No operator found in condition: {}",
+                    condition
+                ))
+                .into());
             };
 
-            let var_value = self.variables.get(var)
-                .ok_or_else(|| crate::DebuggerError::BreakpointError(
-                    format!("Variable '{}' not found", var)
-                ))?;
+            let var_value = self.variables.get(var).ok_or_else(|| {
+                crate::DebuggerError::BreakpointError(format!("Variable '{}' not found", var))
+            })?;
 
-            let compare_value: i64 = value_str.parse()
-                .map_err(|_| crate::DebuggerError::BreakpointError(
-                    format!("Invalid number: {}", value_str)
-                ))?;
+            let compare_value: i64 = value_str.parse().map_err(|_| {
+                crate::DebuggerError::BreakpointError(format!("Invalid number: {}", value_str))
+            })?;
 
             let result = match op {
                 ">" => var_value > &compare_value,
@@ -499,13 +530,13 @@ mod tests {
 
         fn interpolate_log(&self, template: &str) -> crate::Result<String> {
             let mut result = template.to_string();
-            
+
             // Replace {variable} with values
             for (name, value) in &self.variables {
                 let placeholder = format!("{{{}}}", name);
                 result = result.replace(&placeholder, &value.to_string());
             }
-            
+
             Ok(result)
         }
     }
@@ -527,13 +558,17 @@ mod tests {
         let bp = Breakpoint::with_condition("transfer".to_string(), "balance > 1000".to_string());
         manager.set(bp);
 
-        let (should_break, log) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, log) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(should_break);
         assert!(log.is_none());
 
         // Change balance to fail condition
         evaluator.set("balance", 500);
-        let (should_break, log) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, log) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(!should_break);
         assert!(log.is_none());
     }
@@ -547,13 +582,19 @@ mod tests {
         manager.set(bp);
 
         // First two hits should not break
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(!should_break);
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(!should_break);
 
         // Third hit should break
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(should_break);
     }
 
@@ -566,17 +607,25 @@ mod tests {
         manager.set(bp);
 
         // First two hits should not break
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(!should_break);
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(!should_break);
 
         // Third hit should break
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(should_break);
 
         // Fourth hit should not break
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(!should_break);
     }
 
@@ -589,16 +638,24 @@ mod tests {
         let bp = Breakpoint::with_hit_condition("transfer".to_string(), "%2==0".to_string());
         manager.set(bp);
 
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(!should_break); // Hit 1: 1 % 2 == 1
 
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(should_break); // Hit 2: 2 % 2 == 0
 
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(!should_break); // Hit 3: 3 % 2 == 1
 
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(should_break); // Hit 4: 4 % 2 == 0
     }
 
@@ -611,11 +668,13 @@ mod tests {
 
         let bp = Breakpoint::log_point(
             "transfer".to_string(),
-            "Transfer {amount} - Balance: {balance}".to_string()
+            "Transfer {amount} - Balance: {balance}".to_string(),
         );
         manager.set(bp);
 
-        let (should_break, log) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, log) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(!should_break); // Log points don't break
         assert_eq!(log, Some("Transfer 100 - Balance: 1500".to_string()));
     }
@@ -626,21 +685,28 @@ mod tests {
         let mut evaluator = MockEvaluator::new();
         evaluator.set("balance", 1500);
 
-        let mut bp = Breakpoint::with_condition("transfer".to_string(), "balance > 1000".to_string());
+        let mut bp =
+            Breakpoint::with_condition("transfer".to_string(), "balance > 1000".to_string());
         bp.hit_condition = Some(">1".to_string());
         manager.set(bp);
 
         // First hit: hit_condition fails (not > 1 yet)
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(!should_break);
 
         // Second hit: hit_condition passes, expression condition passes
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(should_break);
 
         // Third hit with low balance: hit_condition passes, expression fails
         evaluator.set("balance", 500);
-        let (should_break, _) = manager.should_break_with_context("transfer", &evaluator).unwrap();
+        let (should_break, _) = manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert!(!should_break);
     }
 
@@ -694,17 +760,23 @@ mod tests {
     fn test_hit_count_increments() {
         let mut manager = BreakpointManager::new();
         manager.add("transfer");
-        
+
         let evaluator = MockEvaluator::new();
-        
+
         // Check hit count increments
-        manager.should_break_with_context("transfer", &evaluator).unwrap();
+        manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert_eq!(manager.get("transfer").unwrap().hit_count, 1);
-        
-        manager.should_break_with_context("transfer", &evaluator).unwrap();
+
+        manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert_eq!(manager.get("transfer").unwrap().hit_count, 2);
-        
-        manager.should_break_with_context("transfer", &evaluator).unwrap();
+
+        manager
+            .should_break_with_context("transfer", &evaluator)
+            .unwrap();
         assert_eq!(manager.get("transfer").unwrap().hit_count, 3);
     }
 }

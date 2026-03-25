@@ -2,14 +2,14 @@ use crate::runtime::executor::ContractExecutor;
 use crate::DebuggerError;
 use crate::Result;
 use rayon::prelude::*;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::cell::RefCell;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Instant;
-use std::cell::RefCell;
 use std::thread_local;
+use std::time::Instant;
 
 /// A single batch execution item with arguments and optional expected result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,23 +88,26 @@ impl BatchExecutor {
 
     /// Load batch items from a JSON file
     pub fn load_batch_file<P: AsRef<Path>>(path: P) -> Result<Vec<BatchItem>> {
-        let content = fs
-            ::read_to_string(path.as_ref())
-            .map_err(|e| {
-                DebuggerError::FileError(
-                    format!("Failed to read batch file {:?}: {}", path.as_ref(), e)
-                )
-            })?;
+        let content = fs::read_to_string(path.as_ref()).map_err(|e| {
+            DebuggerError::FileError(format!(
+                "Failed to read batch file {:?}: {}",
+                path.as_ref(),
+                e
+            ))
+        })?;
 
-        let parsed: Vec<BatchItemInput> = serde_json
-            ::from_str(&content)
-            .map_err(|e| {
-                DebuggerError::FileError(
-                    format!("Failed to parse batch file as JSON array {:?}: {}", path.as_ref(), e)
-                )
-            })?;
+        let parsed: Vec<BatchItemInput> = serde_json::from_str(&content).map_err(|e| {
+            DebuggerError::FileError(format!(
+                "Failed to parse batch file as JSON array {:?}: {}",
+                path.as_ref(),
+                e
+            ))
+        })?;
 
-        let items = parsed.into_iter().map(BatchItem::from).collect::<Vec<BatchItem>>();
+        let items = parsed
+            .into_iter()
+            .map(BatchItem::from)
+            .collect::<Vec<BatchItem>>();
 
         Ok(items)
     }
@@ -178,22 +181,10 @@ impl BatchExecutor {
     /// Generate summary from batch results
     pub fn summarize(results: &[BatchResult]) -> BatchSummary {
         let total = results.len();
-        let passed = results
-            .iter()
-            .filter(|r| r.passed)
-            .count();
-        let failed = results
-            .iter()
-            .filter(|r| r.success && !r.passed)
-            .count();
-        let errors = results
-            .iter()
-            .filter(|r| !r.success)
-            .count();
-        let total_duration_ms = results
-            .iter()
-            .map(|r| r.duration_ms)
-            .sum();
+        let passed = results.iter().filter(|r| r.passed).count();
+        let failed = results.iter().filter(|r| r.success && !r.passed).count();
+        let errors = results.iter().filter(|r| !r.success).count();
+        let total_duration_ms = results.iter().map(|r| r.duration_ms).sum();
 
         BatchSummary {
             total,
@@ -226,22 +217,22 @@ impl BatchExecutor {
             let label = result.label.as_deref().unwrap_or(&default_label);
             crate::logging::log_display(
                 format!("\n{} {}", status, label),
-                crate::logging::LogLevel::Info
+                crate::logging::LogLevel::Info,
             );
             crate::logging::log_display(
                 format!("  Args: {}", result.args),
-                crate::logging::LogLevel::Info
+                crate::logging::LogLevel::Info,
             );
 
             if result.success {
                 crate::logging::log_display(
                     format!("  Result: {}", result.result),
-                    crate::logging::LogLevel::Info
+                    crate::logging::LogLevel::Info,
                 );
                 if let Some(expected) = &result.expected {
                     crate::logging::log_display(
                         format!("  Expected: {}", expected),
-                        crate::logging::LogLevel::Info
+                        crate::logging::LogLevel::Info,
                     );
                     if !result.passed {
                         crate::logging::log_display(
@@ -249,20 +240,20 @@ impl BatchExecutor {
                                 "  {}",
                                 Formatter::warning("Result does not match expected value")
                             ),
-                            crate::logging::LogLevel::Warn
+                            crate::logging::LogLevel::Warn,
                         );
                     }
                 }
             } else if let Some(error) = &result.error {
                 crate::logging::log_display(
                     format!("  Error: {}", Formatter::error(error)),
-                    crate::logging::LogLevel::Error
+                    crate::logging::LogLevel::Error,
                 );
             }
 
             crate::logging::log_display(
                 format!("  Duration: {}ms", result.duration_ms),
-                crate::logging::LogLevel::Info
+                crate::logging::LogLevel::Info,
             );
         }
 
@@ -272,30 +263,39 @@ impl BatchExecutor {
         crate::logging::log_display("=".repeat(80), crate::logging::LogLevel::Info);
         crate::logging::log_display(
             format!("  Total:    {}", summary.total),
-            crate::logging::LogLevel::Info
+            crate::logging::LogLevel::Info,
         );
         crate::logging::log_display(
-            format!("  {}", Formatter::success(format!("Passed:   {}", summary.passed))),
-            crate::logging::LogLevel::Info
+            format!(
+                "  {}",
+                Formatter::success(format!("Passed:   {}", summary.passed))
+            ),
+            crate::logging::LogLevel::Info,
         );
 
         if summary.failed > 0 {
             crate::logging::log_display(
-                format!("  {}", Formatter::warning(format!("Failed:   {}", summary.failed))),
-                crate::logging::LogLevel::Warn
+                format!(
+                    "  {}",
+                    Formatter::warning(format!("Failed:   {}", summary.failed))
+                ),
+                crate::logging::LogLevel::Warn,
             );
         }
 
         if summary.errors > 0 {
             crate::logging::log_display(
-                format!("  {}", Formatter::error(format!("Errors:   {}", summary.errors))),
-                crate::logging::LogLevel::Error
+                format!(
+                    "  {}",
+                    Formatter::error(format!("Errors:   {}", summary.errors))
+                ),
+                crate::logging::LogLevel::Error,
             );
         }
 
         crate::logging::log_display(
             format!("  Duration: {}ms", summary.total_duration_ms),
-            crate::logging::LogLevel::Info
+            crate::logging::LogLevel::Info,
         );
         crate::logging::log_display("=".repeat(80), crate::logging::LogLevel::Info);
     }
@@ -334,10 +334,7 @@ fn json_values_equal(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Number(n1), Value::Number(n2)) => n1.as_f64() == n2.as_f64(),
         (Value::Array(a), Value::Array(b)) => {
-            a.len() == b.len()
-                && a.iter()
-                    .zip(b.iter())
-                    .all(|(x, y)| json_values_equal(x, y))
+            a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| json_values_equal(x, y))
         }
         (Value::Object(a), Value::Object(b)) => {
             a.len() == b.len()
@@ -385,7 +382,10 @@ fn truncate_for_table(value: &str, limit: usize) -> String {
         return value.to_string();
     }
 
-    let mut truncated = value.chars().take(limit.saturating_sub(1)).collect::<String>();
+    let mut truncated = value
+        .chars()
+        .take(limit.saturating_sub(1))
+        .collect::<String>();
     truncated.push('…');
     truncated
 }
@@ -396,8 +396,7 @@ mod tests {
 
     #[test]
     fn test_batch_item_deserialization() {
-        let json =
-            r#"[
+        let json = r#"[
             {"args": "[1, 2]", "expected": "3", "label": "Add 1+2"},
             {"args": "[5, 10]"}
         ]"#;
@@ -414,7 +413,11 @@ mod tests {
     #[test]
     fn test_values_match_loose_json() {
         // Different whitespace / key order still matches in loose mode
-        assert!(values_match(r#"{"a":1,"b":2}"#, r#"{ "b": 2, "a": 1 }"#, false));
+        assert!(values_match(
+            r#"{"a":1,"b":2}"#,
+            r#"{ "b": 2, "a": 1 }"#,
+            false
+        ));
         assert!(values_match("42", "42", false));
         // Equivalent numeric representations
         assert!(values_match("1", "1.0", false));
@@ -472,7 +475,7 @@ mod tests {
                 expected: Some("ok".to_string()),
                 passed: true,
                 duration_ms: 10,
-            }
+            },
         ];
 
         let summary = BatchExecutor::summarize(&results);

@@ -308,12 +308,12 @@ pub enum DebugResponse {
     BreakpointCleared { id: String },
 
     /// List of breakpoints
-    BreakpointsList { breakpoints: Vec<BreakpointDescriptor> },
+    BreakpointsList {
+        breakpoints: Vec<BreakpointDescriptor>,
+    },
 
     /// Backend capabilities
-    Capabilities {
-        breakpoints: BreakpointCapabilities,
-    },
+    Capabilities { breakpoints: BreakpointCapabilities },
 
     /// Snapshot loaded
     SnapshotLoaded { summary: String },

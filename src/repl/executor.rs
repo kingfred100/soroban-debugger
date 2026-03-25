@@ -43,14 +43,13 @@ impl ReplExecutor {
                 })?;
             let loaded = loader.apply_to_environment()?;
             engine.executor_mut().apply_snapshot_ledger(&loaded)?;
-            crate::logging::log_display(
-                loaded.format_summary(),
-                crate::logging::LogLevel::Info,
-            );
+            crate::logging::log_display(loaded.format_summary(), crate::logging::LogLevel::Info);
         }
 
         if let Some(storage_json) = &config.storage {
-            engine.executor_mut().set_initial_storage(storage_json.clone())?;
+            engine
+                .executor_mut()
+                .set_initial_storage(storage_json.clone())?;
         }
 
         Ok(ReplExecutor {
@@ -196,12 +195,12 @@ impl ReplExecutor {
     }
     pub fn add_breakpoint(&mut self, function: &str, condition: Option<&str>) -> Result<()> {
         if let Some(condition) = condition {
-            self.engine
-                .breakpoints_mut()
-                .set(crate::debugger::breakpoint::Breakpoint::with_condition(
+            self.engine.breakpoints_mut().set(
+                crate::debugger::breakpoint::Breakpoint::with_condition(
                     function.to_string(),
                     condition.to_string(),
-                ));
+                ),
+            );
         } else {
             self.engine.breakpoints_mut().add(function);
         }

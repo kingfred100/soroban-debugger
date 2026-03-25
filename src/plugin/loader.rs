@@ -321,7 +321,10 @@ impl PluginLoader {
             Ok(verified) => {
                 let signer_allowed = self.trust_policy.allowed_signers.is_empty()
                     || self.trust_policy.allowed_signers.contains(&verified.signer)
-                    || self.trust_policy.allowed_signers.contains(&verified.fingerprint);
+                    || self
+                        .trust_policy
+                        .allowed_signers
+                        .contains(&verified.fingerprint);
                 if signer_allowed {
                     trusted = true;
                 } else {
@@ -418,8 +421,8 @@ impl Drop for LoadedPlugin {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::manifest::PluginSignature;
+    use super::*;
     use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use base64::Engine;
     use ed25519_dalek::{Signer, SigningKey};
@@ -546,7 +549,9 @@ mod tests {
         let err = loader
             .assess_trust(&manifest, Path::new("unsigned-plugin.so"), b"library")
             .unwrap_err();
-        assert!(matches!(err, PluginError::TrustViolation(message) if message.contains("unsigned") || message.contains("signature")));
+        assert!(
+            matches!(err, PluginError::TrustViolation(message) if message.contains("unsigned") || message.contains("signature"))
+        );
     }
 
     #[test]
@@ -564,15 +569,26 @@ mod tests {
         );
 
         let err = loader
-            .assess_trust(&base_manifest("blocked-plugin"), Path::new("blocked.so"), b"library")
+            .assess_trust(
+                &base_manifest("blocked-plugin"),
+                Path::new("blocked.so"),
+                b"library",
+            )
             .unwrap_err();
-        assert!(matches!(err, PluginError::TrustViolation(message) if message.contains("denied by policy")));
+        assert!(
+            matches!(err, PluginError::TrustViolation(message) if message.contains("denied by policy"))
+        );
     }
 
     #[test]
     fn trust_policy_accepts_valid_signed_plugins_from_allowed_signer() {
         let library_bytes = b"signed library";
-        let manifest = sign_manifest(base_manifest("signed-plugin"), "trusted-signer", 9, library_bytes);
+        let manifest = sign_manifest(
+            base_manifest("signed-plugin"),
+            "trusted-signer",
+            9,
+            library_bytes,
+        );
         let mut allowed_signers = BTreeSet::new();
         allowed_signers.insert("trusted-signer".to_string());
         let loader = PluginLoader::with_trust_policy(
@@ -591,6 +607,9 @@ mod tests {
 
         assert!(assessment.trusted);
         assert!(assessment.warnings.is_empty());
-        assert_eq!(assessment.signer.as_ref().map(|s| s.signer.as_str()), Some("trusted-signer"));
+        assert_eq!(
+            assessment.signer.as_ref().map(|s| s.signer.as_str()),
+            Some("trusted-signer")
+        );
     }
 }

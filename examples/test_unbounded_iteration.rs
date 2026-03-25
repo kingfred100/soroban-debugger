@@ -1,5 +1,5 @@
 //! Example demonstrating the improved unbounded iteration detection
-//! 
+//!
 //! This example shows how the enhanced security analyzer can detect
 //! storage-driven loops with improved precision and confidence scoring.
 
@@ -7,42 +7,48 @@ use soroban_debugger::analyzer::security::SecurityAnalyzer;
 
 fn main() {
     println!("Testing improved unbounded iteration detection...");
-    
+
     // Create a simple WASM module with storage calls in loops
     let wasm_with_storage_loop = create_wasm_with_storage_loop();
-    
+
     let analyzer = SecurityAnalyzer::new();
     match analyzer.analyze(&wasm_with_storage_loop, None, None) {
         Ok(report) => {
-            println!("Analysis complete. Found {} security issues.", report.findings.len());
-            
+            println!(
+                "Analysis complete. Found {} security issues.",
+                report.findings.len()
+            );
+
             for finding in &report.findings {
                 if finding.rule_id == "unbounded-iteration" {
                     println!("🔍 Unbounded Iteration Finding:");
                     println!("  Severity: {:?}", finding.severity);
                     println!("  Description: {}", finding.description);
-                    
+
                     if let Some(confidence) = &finding.confidence {
                         println!("  Confidence: {:?}", confidence.level);
                         println!("  Rationale: {}", confidence.rationale);
                     }
-                    
+
                     if let Some(context) = &finding.context {
                         if let Some(depth) = context.loop_nesting_depth {
                             println!("  Loop Nesting Depth: {}", depth);
                         }
-                        
+
                         if let Some(pattern) = &context.storage_call_pattern {
                             println!("  Storage Calls in Loops: {}", pattern.calls_in_loops);
-                            println!("  Storage Calls Outside Loops: {}", pattern.calls_outside_loops);
+                            println!(
+                                "  Storage Calls Outside Loops: {}",
+                                pattern.calls_outside_loops
+                            );
                         }
-                        
+
                         if let Some(cf_info) = &context.control_flow_info {
                             println!("  Loop Types: {:?}", cf_info.loop_types);
                             println!("  Conditional Branches: {}", cf_info.conditional_branches);
                         }
                     }
-                    
+
                     println!("  Remediation: {}", finding.remediation);
                     println!();
                 }
@@ -57,15 +63,15 @@ fn main() {
 fn create_wasm_with_storage_loop() -> Vec<u8> {
     // This is a minimal WASM module that imports a storage function and calls it in a loop
     // For demonstration purposes, we'll create a simple pattern
-    
+
     let mut module = vec![
         0x00, 0x61, 0x73, 0x6D, // WASM magic
         0x01, 0x00, 0x00, 0x00, // WASM version
     ];
-    
+
     // Type section (one function type: () -> ())
     module.extend_from_slice(&[0x01, 0x60, 0x00, 0x00]);
-    
+
     // Import section (import storage_get from env)
     module.extend_from_slice(&[
         0x02, // Import section id
@@ -76,16 +82,16 @@ fn create_wasm_with_storage_loop() -> Vec<u8> {
     module.extend_from_slice(&[0x0B]); // Length of "storage_get"
     module.extend_from_slice(b"storage_get");
     module.extend_from_slice(&[0x00, 0x00]); // Import kind: function, type index 0
-    
+
     // Function section (one local function)
     module.extend_from_slice(&[0x03, 0x01, 0x00]);
-    
+
     // Export section (export the function)
     module.extend_from_slice(&[0x07, 0x01]);
     module.extend_from_slice(&[0x09]); // Length of "test_func"
     module.extend_from_slice(b"test_func");
     module.extend_from_slice(&[0x00, 0x01]); // Export kind: function, function index 1
-    
+
     // Code section (function body with loop and storage call)
     module.extend_from_slice(&[0x0A, 0x01, 0x09]); // Code section, 1 function, body size 9
     module.extend_from_slice(&[
@@ -96,37 +102,46 @@ fn create_wasm_with_storage_loop() -> Vec<u8> {
         0x0B, // End loop
         0x0B, // End function
     ]);
-    
+
     module
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_unbounded_iteration_detection() {
         let wasm = create_wasm_with_storage_loop();
         let analyzer = SecurityAnalyzer::new();
-        
-        let report = analyzer.analyze(&wasm, None, None).expect("Analysis should succeed");
-        
+
+        let report = analyzer
+            .analyze(&wasm, None, None)
+            .expect("Analysis should succeed");
+
         // Should find the unbounded iteration issue
-        let unbounded_findings: Vec<_> = report.findings
+        let unbounded_findings: Vec<_> = report
+            .findings
             .iter()
             .filter(|f| f.rule_id == "unbounded-iteration")
             .collect();
-        
-        assert!(!unbounded_findings.is_empty(), "Should detect unbounded iteration");
-        
+
+        assert!(
+            !unbounded_findings.is_empty(),
+            "Should detect unbounded iteration"
+        );
+
         let finding = unbounded_findings[0];
-        assert_eq!(finding.severity, soroban_debugger::analyzer::security::Severity::High);
-        
+        assert_eq!(
+            finding.severity,
+            soroban_debugger::analyzer::security::Severity::High
+        );
+
         // Should have confidence metadata
         assert!(finding.confidence.is_some());
         let confidence = finding.confidence.as_ref().unwrap();
         assert!(!confidence.rationale.is_empty());
-        
+
         // Should have context metadata
         assert!(finding.context.is_some());
         let context = finding.context.as_ref().unwrap();

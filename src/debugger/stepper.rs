@@ -88,7 +88,7 @@ impl Stepper {
             let loc = debug_state
                 .current_instruction()
                 .and_then(|i| source_map.lookup(i.offset));
-                
+
             let is_different_line = match (&start_loc, &loc) {
                 (Some(s), Some(l)) => s.file != l.file || s.line != l.line,
                 (None, Some(_)) | (Some(_), None) => true,
@@ -141,7 +141,9 @@ impl Stepper {
             return true;
         }
 
-        debug_state.instruction_pointer().should_pause_at(instruction)
+        debug_state
+            .instruction_pointer()
+            .should_pause_at(instruction)
     }
 
     pub fn on_instruction(

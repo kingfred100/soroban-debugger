@@ -43,7 +43,13 @@ impl ReplCommand {
             "break",
             "list-breaks",
             "clear-break",
-            "call", "storage", "history", "clear", "help", "exit", "quit",
+            "call",
+            "storage",
+            "history",
+            "clear",
+            "help",
+            "exit",
+            "quit",
         ]
     }
 

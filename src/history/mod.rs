@@ -185,9 +185,11 @@ impl HistoryManager {
                  \x20 1. Inspect the file with `cat \"{}\"` and fix any JSON syntax errors.\n\
                  \x20 2. Back up and remove the file (`mv \"{}\" \"{}.bak\"`) to start fresh.\n\
                  \x20 3. Restore from a previous backup if one exists.",
-                self.file_path.display(), e,
                 self.file_path.display(),
-                self.file_path.display(), self.file_path.display(),
+                e,
+                self.file_path.display(),
+                self.file_path.display(),
+                self.file_path.display(),
             ))
         })?;
         Ok(history)
@@ -420,8 +422,6 @@ mod tests {
             memory_used: mem,
         }
     }
-
-
 
     // ── load_history — corrupt file tests (the requested verification) ───────
 

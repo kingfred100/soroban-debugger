@@ -113,7 +113,9 @@ impl PluginManifest {
 
         if let Some(signature) = &self.signature {
             if signature.signer.trim().is_empty() {
-                return Err("Plugin signer cannot be empty when signature metadata is present".to_string());
+                return Err(
+                    "Plugin signer cannot be empty when signature metadata is present".to_string(),
+                );
             }
             if signature.public_key.trim().is_empty() {
                 return Err("Plugin signature public_key cannot be empty".to_string());

@@ -198,9 +198,9 @@ fn analyze_function_arithmetic(
 
     while !reader.eof() {
         let offset = reader.original_position();
-        let op = reader.read().map_err(|e| {
-            DebuggerError::WasmLoadError(format!("Failed to read operator: {}", e))
-        })?;
+        let op = reader
+            .read()
+            .map_err(|e| DebuggerError::WasmLoadError(format!("Failed to read operator: {}", e)))?;
 
         match op {
             Operator::LocalGet { local_index } => {
@@ -258,7 +258,11 @@ fn analyze_function_arithmetic(
             }
             Operator::I32Eqz | Operator::I64Eqz => {
                 let value = stack.pop().unwrap_or_else(StackValue::unknown);
-                note_compare(&mut observations, &value.arithmetic_dependencies, CompareKind::Eqz);
+                note_compare(
+                    &mut observations,
+                    &value.arithmetic_dependencies,
+                    CompareKind::Eqz,
+                );
                 stack.push(StackValue::merge(
                     StackValueKind::Compare(CompareKind::Eqz),
                     [value],
@@ -288,7 +292,11 @@ fn analyze_function_arithmetic(
                 let lhs = stack.pop().unwrap_or_else(StackValue::unknown);
                 let compare_kind = compare_kind(&op).expect("comparison operator expected");
                 let deps = StackValue::merge(StackValueKind::Compare(compare_kind), [lhs, rhs]);
-                note_compare(&mut observations, &deps.arithmetic_dependencies, compare_kind);
+                note_compare(
+                    &mut observations,
+                    &deps.arithmetic_dependencies,
+                    compare_kind,
+                );
                 stack.push(deps);
             }
             Operator::If { .. } => {
@@ -305,21 +313,19 @@ fn analyze_function_arithmetic(
         instruction_index += 1;
     }
 
-    Ok(
-        arithmetic_ops
-            .into_iter()
-            .enumerate()
-            .filter_map(|(arith_index, (instruction_index, offset, instruction))| {
-                classify_arithmetic_observation(
-                    function_index,
-                    instruction_index,
-                    offset,
-                    instruction,
-                    &observations[arith_index],
-                )
-            })
-            .collect(),
-    )
+    Ok(arithmetic_ops
+        .into_iter()
+        .enumerate()
+        .filter_map(|(arith_index, (instruction_index, offset, instruction))| {
+            classify_arithmetic_observation(
+                function_index,
+                instruction_index,
+                offset,
+                instruction,
+                &observations[arith_index],
+            )
+        })
+        .collect())
 }
 
 fn note_compare(

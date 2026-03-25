@@ -95,7 +95,9 @@ fn test_detects_unchecked_arithmetic_with_high_confidence() {
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].confidence, Some(0.95));
     assert!(findings[0].description.contains("Confidence: high"));
-    assert!(findings[0].description.contains("No comparison-derived conditional branch"));
+    assert!(findings[0]
+        .description
+        .contains("No comparison-derived conditional branch"));
 }
 
 #[test]
@@ -103,11 +105,16 @@ fn test_ignores_semantically_guarded_arithmetic() {
     let wasm = wasm_with_single_i32_function(
         2,
         &[],
-        &[0x20, 0x00, 0x20, 0x01, 0x6a, 0x20, 0x00, 0x49, 0x04, 0x40, 0x0b],
+        &[
+            0x20, 0x00, 0x20, 0x01, 0x6a, 0x20, 0x00, 0x49, 0x04, 0x40, 0x0b,
+        ],
     );
 
     let findings = arithmetic_findings(&wasm);
-    assert!(findings.is_empty(), "compare-derived branch should suppress finding");
+    assert!(
+        findings.is_empty(),
+        "compare-derived branch should suppress finding"
+    );
 }
 
 #[test]
@@ -145,25 +152,33 @@ fn test_flags_adjacent_but_unrelated_compare() {
 
 #[test]
 fn test_compared_without_branch_downgrades_confidence() {
-    let wasm =
-        wasm_with_single_i32_function(2, &[], &[0x20, 0x00, 0x20, 0x01, 0x6a, 0x20, 0x00, 0x49, 0x1a]);
+    let wasm = wasm_with_single_i32_function(
+        2,
+        &[],
+        &[0x20, 0x00, 0x20, 0x01, 0x6a, 0x20, 0x00, 0x49, 0x1a],
+    );
 
     let findings = arithmetic_findings(&wasm);
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].confidence, Some(0.70));
     assert!(findings[0].description.contains("Confidence: medium"));
-    assert!(findings[0].description.contains("does not drive conditional control flow"));
+    assert!(findings[0]
+        .description
+        .contains("does not drive conditional control flow"));
 }
 
 #[test]
 fn test_direct_branch_without_compare_is_low_confidence() {
-    let wasm = wasm_with_single_i32_function(2, &[], &[0x20, 0x00, 0x20, 0x01, 0x6a, 0x04, 0x40, 0x0b]);
+    let wasm =
+        wasm_with_single_i32_function(2, &[], &[0x20, 0x00, 0x20, 0x01, 0x6a, 0x04, 0x40, 0x0b]);
 
     let findings = arithmetic_findings(&wasm);
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].confidence, Some(0.40));
     assert!(findings[0].description.contains("Confidence: low"));
-    assert!(findings[0].description.contains("no recognized compare-and-branch guard"));
+    assert!(findings[0]
+        .description
+        .contains("no recognized compare-and-branch guard"));
 }
 
 #[test]
@@ -173,7 +188,12 @@ fn test_detects_all_arithmetic_types() {
     for opcode in arithmetic_opcodes {
         let wasm = wasm_with_single_i32_function(2, &[], &[0x20, 0x00, 0x20, 0x01, opcode]);
         let findings = arithmetic_findings(&wasm);
-        assert_eq!(findings.len(), 1, "Should detect arithmetic opcode: 0x{:X}", opcode);
+        assert_eq!(
+            findings.len(),
+            1,
+            "Should detect arithmetic opcode: 0x{:X}",
+            opcode
+        );
     }
 }
 

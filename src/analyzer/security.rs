@@ -1,10 +1,10 @@
 use crate::runtime::executor::ContractExecutor;
-use crate::server::protocol::{ DynamicTraceEvent, DynamicTraceEventKind };
-use crate::utils::wasm::{ analyze_arithmetic_ops };
+use crate::server::protocol::{DynamicTraceEvent, DynamicTraceEventKind};
+use crate::utils::wasm::analyze_arithmetic_ops;
 use crate::Result;
-use serde::{ Deserialize, Serialize };
-use std::collections::{ HashMap, HashSet };
-use wasmparser::{ Operator, Parser, Payload };
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use wasmparser::{Operator, Parser, Payload};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Severity {
@@ -40,7 +40,7 @@ pub trait SecurityRule {
     fn analyze_dynamic(
         &self,
         _executor: Option<&ContractExecutor>,
-        _trace: &[DynamicTraceEvent]
+        _trace: &[DynamicTraceEvent],
     ) -> Result<Vec<SecurityFinding>> {
         Ok(vec![])
     }
@@ -59,7 +59,7 @@ impl SecurityAnalyzer {
                 Box::new(AuthorizationCheckRule),
                 Box::new(ReentrancyPatternRule),
                 Box::new(CrossContractImportRule),
-                Box::new(UnboundedIterationRule)
+                Box::new(UnboundedIterationRule),
             ],
         }
     }
@@ -68,7 +68,7 @@ impl SecurityAnalyzer {
         &self,
         wasm_bytes: &[u8],
         executor: Option<&ContractExecutor>,
-        trace: Option<&[DynamicTraceEvent]>
+        trace: Option<&[DynamicTraceEvent]>,
     ) -> Result<SecurityReport> {
         let mut report = SecurityReport::default();
 
@@ -103,7 +103,11 @@ fn strkey_crc16(data: &[u8]) -> u16 {
     for &byte in data {
         crc ^= (byte as u16) << 8;
         for _ in 0..8 {
-            crc = if (crc & 0x8000) != 0 { (crc << 1) ^ 0x1021 } else { crc << 1 };
+            crc = if (crc & 0x8000) != 0 {
+                (crc << 1) ^ 0x1021
+            } else {
+                crc << 1
+            };
         }
     }
     crc
@@ -198,10 +202,9 @@ impl SecurityRule for HardcodedAddressRule {
                         // Without guard 2, arbitrary 56-char constants such as error
                         // message fragments or base64 blobs that happen to start with
                         // 'G' or 'C' would be mis-classified as addresses.
-                        if
-                            (word.starts_with('G') || word.starts_with('C')) &&
-                            word.len() == 56 &&
-                            is_valid_strkey(word)
+                        if (word.starts_with('G') || word.starts_with('C'))
+                            && word.len() == 56
+                            && is_valid_strkey(word)
                         {
                             findings.push(SecurityFinding {
                                 rule_id: self.name().to_string(),
@@ -277,7 +280,7 @@ impl SecurityRule for AuthorizationCheckRule {
     fn analyze_dynamic(
         &self,
         _executor: Option<&ContractExecutor>,
-        trace: &[DynamicTraceEvent]
+        trace: &[DynamicTraceEvent],
     ) -> Result<Vec<SecurityFinding>> {
         let mut findings = Vec::new();
         let mut auth_sequence = None;
@@ -340,7 +343,7 @@ impl SecurityRule for ReentrancyPatternRule {
     fn analyze_dynamic(
         &self,
         _executor: Option<&ContractExecutor>,
-        trace: &[DynamicTraceEvent]
+        trace: &[DynamicTraceEvent],
     ) -> Result<Vec<SecurityFinding>> {
         Ok(analyze_reentrancy_pattern_dynamic(trace))
     }
@@ -400,20 +403,19 @@ impl SecurityRule for CrossContractImportRule {
             return Ok(Vec::new());
         }
 
-        Ok(
-            vec![SecurityFinding {
-                rule_id: self.name().to_string(),
-                severity: Severity::Low,
-                location: "Import Section".to_string(),
-                description: format!(
-                    "Cross-contract host imports detected: {}",
-                    matches.join(", ")
-                ),
-                remediation: "Review external call sites for reentrancy and authorization checks.".to_string(),
-                confidence: None,
-                rationale: None,
-            }]
-        )
+        Ok(vec![SecurityFinding {
+            rule_id: self.name().to_string(),
+            severity: Severity::Low,
+            location: "Import Section".to_string(),
+            description: format!(
+                "Cross-contract host imports detected: {}",
+                matches.join(", ")
+            ),
+            remediation: "Review external call sites for reentrancy and authorization checks."
+                .to_string(),
+            confidence: None,
+            rationale: None,
+        }])
     }
 }
 
@@ -499,17 +501,15 @@ impl SecurityRule for UnboundedIterationRule {
     fn analyze_dynamic(
         &self,
         _executor: Option<&ContractExecutor>,
-        trace: &[DynamicTraceEvent]
+        trace: &[DynamicTraceEvent],
     ) -> Result<Vec<SecurityFinding>> {
-        Ok(
-            analyze_unbounded_iteration_dynamic(trace)
-                .into_iter()
-                .map(|mut finding| {
-                    finding.rule_id = self.name().to_string();
-                    finding
-                })
-                .collect()
-        )
+        Ok(analyze_unbounded_iteration_dynamic(trace)
+            .into_iter()
+            .map(|mut finding| {
+                finding.rule_id = self.name().to_string();
+                finding
+            })
+            .collect())
     }
 }
 
@@ -525,9 +525,7 @@ struct UnboundedStaticSignal {
 
 #[derive(Debug, Clone)]
 enum ControlFlowFrame {
-    Loop {
-        loop_type: String,
-    },
+    Loop { loop_type: String },
     Block,
     If,
 }
@@ -585,25 +583,21 @@ fn analyze_unbounded_iteration_static(wasm_bytes: &[u8]) -> UnboundedStaticSigna
 
                     match op {
                         Operator::Loop { .. } => {
-                            let current_depth = control_flow_stack
-                                .iter()
-                                .filter(|f| f.is_loop())
-                                .count();
-                            let loop_type = (
-                                if current_depth > 0 {
-                                    "nested_loop"
-                                } else {
-                                    "top_level_loop"
-                                }
-                            ).to_string();
+                            let current_depth =
+                                control_flow_stack.iter().filter(|f| f.is_loop()).count();
+                            let loop_type = (if current_depth > 0 {
+                                "nested_loop"
+                            } else {
+                                "top_level_loop"
+                            })
+                            .to_string();
                             loop_types_seen.insert(loop_type.clone());
 
                             control_flow_stack.push(ControlFlowFrame::Loop {
                                 loop_type: loop_type.clone(),
                             });
-                            signal.max_nesting_depth = signal.max_nesting_depth.max(
-                                current_depth + 1
-                            );
+                            signal.max_nesting_depth =
+                                signal.max_nesting_depth.max(current_depth + 1);
                         }
                         Operator::Block { .. } => {
                             control_flow_stack.push(ControlFlowFrame::Block);
@@ -614,26 +608,20 @@ fn analyze_unbounded_iteration_static(wasm_bytes: &[u8]) -> UnboundedStaticSigna
                         }
                         Operator::Else => {}
                         Operator::End => {
-                            if let Some(frame) = control_flow_stack.pop() {
+                            if let Some(_frame) = control_flow_stack.pop() {
                                 // max_nesting_depth tracks the peak depth and shouldn't be decremented
                             }
-                            control_flow_stack.pop();
                         }
                         Operator::Call { function_index } => {
                             let is_storage_call = storage_import_indices.contains(&function_index);
-                            let current_loop_depth = control_flow_stack
-                                .iter()
-                                .filter(|f| f.is_loop())
-                                .count();
+                            let current_loop_depth =
+                                control_flow_stack.iter().filter(|f| f.is_loop()).count();
 
                             if is_storage_call {
                                 if current_loop_depth > 0 {
                                     storage_calls_in_loops += 1;
-                                    if
-                                        let Some(loop_frame) = control_flow_stack
-                                            .iter()
-                                            .rev()
-                                            .find(|f| f.is_loop())
+                                    if let Some(loop_frame) =
+                                        control_flow_stack.iter().rev().find(|f| f.is_loop())
                                     {
                                         if let Some(loop_type) = loop_frame.loop_type() {
                                             loop_types_with_calls.insert(loop_type.to_string());
@@ -673,9 +661,7 @@ fn analyze_unbounded_iteration_static(wasm_bytes: &[u8]) -> UnboundedStaticSigna
 
     signal.rationale = Some(format!(
         "Storage calls in loops: {}, max nesting depth: {}, loop types with calls: {:?}",
-        storage_calls_in_loops,
-        signal.max_nesting_depth,
-        loop_types_with_calls
+        storage_calls_in_loops, signal.max_nesting_depth, loop_types_with_calls
     ));
     let _ = conditional_branches;
     let _ = storage_calls_outside_loops;
@@ -747,9 +733,8 @@ fn analyze_unbounded_iteration_dynamic(trace: &[DynamicTraceEvent]) -> Option<Se
 
     let unique_keys = read_key_counts.len();
     let max_reads_for_one_key = read_key_counts.values().copied().max().unwrap_or(0);
-    let likely_unbounded =
-        total_reads >= 64 &&
-        (unique_keys <= total_reads / 4 || max_reads_for_one_key >= 32 || total_reads >= 128);
+    let likely_unbounded = total_reads >= 64
+        && (unique_keys <= total_reads / 4 || max_reads_for_one_key >= 32 || total_reads >= 128);
 
     if !likely_unbounded {
         return None;
@@ -859,7 +844,8 @@ fn analyze_reentrancy_pattern_dynamic(trace: &[DynamicTraceEvent]) -> Vec<Securi
                 let pre_call_write_seen = frame
                     .as_ref()
                     .and_then(|key| writes_seen_by_frame.get(key).copied())
-                    .unwrap_or(0) > 0;
+                    .unwrap_or(0)
+                    > 0;
 
                 pending_cross_call = Some(PendingCrossCall {
                     frame,
@@ -941,16 +927,28 @@ mod tests {
     #[test]
     fn strkey_accepts_well_formed_g_address() {
         let addr = build_strkey(6 << 3, &[0u8; 32]);
-        assert!(addr.starts_with('G'), "sanity: version 0x30 encodes to 'G' prefix");
-        assert!(is_valid_strkey(&addr), "well-formed G address must be accepted");
+        assert!(
+            addr.starts_with('G'),
+            "sanity: version 0x30 encodes to 'G' prefix"
+        );
+        assert!(
+            is_valid_strkey(&addr),
+            "well-formed G address must be accepted"
+        );
     }
 
     /// Same for the contract ('C') variant.
     #[test]
     fn strkey_accepts_well_formed_c_address() {
         let addr = build_strkey(2 << 3, &[0u8; 32]);
-        assert!(addr.starts_with('C'), "sanity: version 0x10 encodes to 'C' prefix");
-        assert!(is_valid_strkey(&addr), "well-formed C address must be accepted");
+        assert!(
+            addr.starts_with('C'),
+            "sanity: version 0x10 encodes to 'C' prefix"
+        );
+        assert!(
+            is_valid_strkey(&addr),
+            "well-formed C address must be accepted"
+        );
     }
 
     /// 56 uppercase-ASCII chars starting with 'G' but with all-'A' payload have
@@ -961,7 +959,10 @@ mod tests {
         // It has a valid prefix/length but an invalid payload+CRC combination.
         let fake = format!("G{}", "A".repeat(55));
         assert_eq!(fake.len(), 56);
-        assert!(!is_valid_strkey(&fake), "all-A token must be rejected (bad CRC)");
+        assert!(
+            !is_valid_strkey(&fake),
+            "all-A token must be rejected (bad CRC)"
+        );
     }
 
     /// A string that is 56 chars, starts with 'G', but contains characters
@@ -972,18 +973,25 @@ mod tests {
         // Contains '0', '1', and lower-case letters — all outside A-Z/2-7.
         let bad_chars = "G0001111abcdefghABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDE";
         assert_eq!(bad_chars.len(), 53); // not 56, show next case is the real one
-        // Craft exactly 56 chars with an invalid char ('0') at position 1.
+                                         // Craft exactly 56 chars with an invalid char ('0') at position 1.
         let with_zero = "G0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
         assert_eq!(with_zero.len(), 56);
-        assert!(!is_valid_strkey(with_zero), "token with '0' must be rejected");
+        assert!(
+            !is_valid_strkey(with_zero),
+            "token with '0' must be rejected"
+        );
     }
 
     /// Strings shorter or longer than 56 characters must always be rejected,
     /// regardless of prefix.
     #[test]
     fn strkey_rejects_wrong_length() {
-        assert!(!is_valid_strkey("GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")); // 55
-        assert!(!is_valid_strkey("GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")); // 57
+        assert!(!is_valid_strkey(
+            "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        )); // 55
+        assert!(!is_valid_strkey(
+            "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        )); // 57
         assert!(!is_valid_strkey("")); // empty
     }
 
@@ -1024,16 +1032,10 @@ mod tests {
         assert!(data_len < 128, "test helper only handles short payloads");
 
         let mut wasm = vec![
-            0x00,
-            0x61,
-            0x73,
-            0x6d, // magic: \0asm
-            0x01,
-            0x00,
-            0x00,
-            0x00, // version: 1
+            0x00, 0x61, 0x73, 0x6d, // magic: \0asm
+            0x01, 0x00, 0x00, 0x00, // version: 1
             // Data section (id = 11)
-            0x0b
+            0x0b,
         ];
 
         // Section content = segment-count(1) + segment
@@ -1063,7 +1065,7 @@ mod tests {
         // valid base32 characters, yet none carries a correct CRC-16 checksum.
         let fake_tokens = [
             "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", // 57 → trim
-            "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", // 55 → skip
+            "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",  // 55 → skip
             // Exactly 56 chars, valid base32, but wrong CRC:
             "GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVW",
             "CABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVW",
@@ -1078,7 +1080,9 @@ mod tests {
                 continue; // shorter than 56 — would not be picked up anyway
             }
             let wasm = wasm_with_data_string(&t);
-            let findings = rule.analyze_static(&wasm).expect("analyze_static should not error");
+            let findings = rule
+                .analyze_static(&wasm)
+                .expect("analyze_static should not error");
             assert!(
                 findings.is_empty(),
                 "token '{}' must not produce a finding (not a valid StrKey): {:?}",
@@ -1098,9 +1102,15 @@ mod tests {
 
         let wasm = wasm_with_data_string(&valid_addr);
         let rule = HardcodedAddressRule;
-        let findings = rule.analyze_static(&wasm).expect("analyze_static should not error");
+        let findings = rule
+            .analyze_static(&wasm)
+            .expect("analyze_static should not error");
 
-        assert_eq!(findings.len(), 1, "exactly one finding expected for a valid hardcoded address");
+        assert_eq!(
+            findings.len(),
+            1,
+            "exactly one finding expected for a valid hardcoded address"
+        );
         assert_eq!(findings[0].rule_id, "hardcoded-address");
         assert!(
             findings[0].description.contains(&valid_addr),
@@ -1113,13 +1123,17 @@ mod tests {
     #[test]
     fn hardcoded_address_rule_mixed_tokens() {
         let valid_addr = build_strkey(2 << 3, &[0x11u8; 32]); // C-prefix contract address
-        // Pad the two strings with a space so they end up as separate tokens.
-        let payload =
-            format!("{} GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUV", valid_addr);
+                                                              // Pad the two strings with a space so they end up as separate tokens.
+        let payload = format!(
+            "{} GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUV",
+            valid_addr
+        );
 
         let wasm = wasm_with_data_string(&payload);
         let rule = HardcodedAddressRule;
-        let findings = rule.analyze_static(&wasm).expect("analyze_static should not error");
+        let findings = rule
+            .analyze_static(&wasm)
+            .expect("analyze_static should not error");
 
         assert_eq!(
             findings.len(),
@@ -1340,7 +1354,7 @@ mod tests {
     #[test]
     fn auth_rule_detects_storage_before_auth() {
         let rule = AuthorizationCheckRule;
-        
+
         // Test case: storage write happens before authorization
         let trace = vec![
             DynamicTraceEvent {
@@ -1366,13 +1380,15 @@ mod tests {
         let findings = rule.analyze_dynamic(None, &trace).unwrap();
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "missing-auth");
-        assert!(findings[0].description.contains("1 storage write(s) occurring before any authorization event"));
+        assert!(findings[0]
+            .description
+            .contains("1 storage write(s) occurring before any authorization event"));
     }
 
     #[test]
     fn auth_rule_allows_storage_after_auth() {
         let rule = AuthorizationCheckRule;
-        
+
         // Test case: authorization happens before storage write (should be OK)
         let trace = vec![
             DynamicTraceEvent {
@@ -1402,7 +1418,7 @@ mod tests {
     #[test]
     fn auth_rule_detects_multiple_storage_before_auth() {
         let rule = AuthorizationCheckRule;
-        
+
         // Test case: multiple storage writes happen before authorization
         let trace = vec![
             DynamicTraceEvent {
@@ -1437,13 +1453,15 @@ mod tests {
         let findings = rule.analyze_dynamic(None, &trace).unwrap();
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "missing-auth");
-        assert!(findings[0].description.contains("2 storage write(s) occurring before any authorization event"));
+        assert!(findings[0]
+            .description
+            .contains("2 storage write(s) occurring before any authorization event"));
     }
 
     #[test]
     fn auth_rule_detects_storage_without_any_auth() {
         let rule = AuthorizationCheckRule;
-        
+
         // Test case: storage writes with no authorization at all
         let trace = vec![
             DynamicTraceEvent {
@@ -1469,6 +1487,8 @@ mod tests {
         let findings = rule.analyze_dynamic(None, &trace).unwrap();
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule_id, "missing-auth");
-        assert!(findings[0].description.contains("2 storage write(s) occurring before any authorization event"));
+        assert!(findings[0]
+            .description
+            .contains("2 storage write(s) occurring before any authorization event"));
     }
 }

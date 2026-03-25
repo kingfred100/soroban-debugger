@@ -10,7 +10,9 @@ use tracing::{debug, error, info, warn};
 static GLOBAL_PLUGIN_REGISTRY: OnceLock<Arc<RwLock<PluginRegistry>>> = OnceLock::new();
 
 fn env_var_truthy(name: &str) -> bool {
-    std::env::var(name).ok().is_some_and(|v| env_value_truthy(&v))
+    std::env::var(name)
+        .ok()
+        .is_some_and(|v| env_value_truthy(&v))
 }
 
 fn env_value_truthy(value: &str) -> bool {
