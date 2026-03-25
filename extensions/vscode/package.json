@@ -25,7 +25,8 @@
   ],
   "activationEvents": [
     "onDebugResolve:soroban",
-    "onCommand:soroban-debugger.runLaunchPreflight"
+    "onCommand:soroban-debugger.runLaunchPreflight",
+    "onCommand:soroban-debugger.diagnoseSourceMap"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -33,6 +34,11 @@
       {
         "command": "soroban-debugger.runLaunchPreflight",
         "title": "Soroban: Run Launch Preflight",
+        "category": "Soroban"
+      },
+      {
+        "command": "soroban-debugger.diagnoseSourceMap",
+        "title": "Soroban: Diagnose Source Maps for Current File",
         "category": "Soroban"
       }
     ],
@@ -152,7 +158,7 @@
     "build": "npm run compile"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^20.19.37",
     "@types/vscode": "^1.75.0",
     "@vscode/debugprotocol": "^1.65.0",
     "typescript": "^5.0.0"

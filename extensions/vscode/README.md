@@ -89,6 +89,16 @@ Before starting a debug session, you can validate the Soroban launch configurati
 
 If preflight finds a problem, the extension reports the issue and offers quick fixes such as opening `launch.json`, generating a launch config, or selecting a missing file.
 
+### 1b. Diagnose Source Maps
+
+If your breakpoints are not hitting or appear as "unverified" gray circles, you can diagnose the source mapping for the current file:
+
+1. Open the Rust file where your breakpoints are set.
+2. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS).
+3. Search for and run `Soroban: Diagnose Source Maps for Current File`.
+
+This will open an output channel explaining how the debugger heuristically maps your breakpoints to compiled WASM functions, and alert you if a breakpoint is placed outside of a detectable function block.
+
 ### 2. Build Your Contract
 
 Ensure your contract is compiled to WASM:

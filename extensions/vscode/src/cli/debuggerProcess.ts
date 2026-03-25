@@ -386,7 +386,7 @@ export class DebuggerProcess {
       condition: breakpoint.condition,
       hit_condition: breakpoint.hitCondition,
       log_message: breakpoint.logMessage
-    });
+    }as any);
     this.expectResponse(response, 'BreakpointSet');
   }
 
@@ -394,7 +394,7 @@ export class DebuggerProcess {
     const response = await this.sendRequest({
       type: 'ClearBreakpoint',
       id: breakpointId
-    });
+    } as any);
     this.expectResponse(response, 'BreakpointCleared');
   }
 
