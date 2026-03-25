@@ -492,8 +492,8 @@ impl SecurityRule for UnboundedIterationRule {
                     analysis.storage_calls_inside_loops
                 ),
                 remediation: "Bound iteration over storage-backed collections (pagination, explicit limits, or capped batch size).".to_string(),
-                confidence: None,
-                rationale: None,
+                confidence: analysis.confidence,
+                rationale: analysis.rationale,
             }]
         )
     }
