@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
-import { DebuggerProcess, DebuggerTimeoutError, formatProtocolMismatchMessage } from '../cli/debuggerProcess';
+import { DebuggerCancelledError, DebuggerProcess, DebuggerTimeoutError, formatProtocolMismatchMessage } from '../cli/debuggerProcess';
 import { resolveSourceBreakpoints } from '../dap/sourceBreakpoints';
 import { DapClient } from './dapClient';
 
@@ -20,6 +20,7 @@ async function main(): Promise<void> {
   assert.match(compatibilityMessage, /Remediation:/, 'Expected protocol mismatch message to include remediation guidance');
 
   await assertPerRequestTimeoutBehavior();
+  await assertCancellationBehavior();
 
   const extensionRoot = process.cwd();
   const repoRoot = path.resolve(extensionRoot, '..', '..');
@@ -132,6 +133,51 @@ async function assertPerRequestTimeoutBehavior(): Promise<void> {
     assert.equal(threwTimeout, true, `Expected ${req.type} to time out deterministically`);
     assert.equal((dp as any).pendingRequests.size, 0, 'Expected pending request map to be cleared after timeout');
   }
+}
+
+async function assertCancellationBehavior(): Promise<void> {
+  const dp = new DebuggerProcess({
+    contractPath: 'placeholder.wasm',
+    entrypoint: 'main',
+    args: [],
+    requestTimeoutMs: 1000
+  });
+
+  (dp as any).socket = { write: () => undefined, destroyed: false };
+  const sendRequest = (dp as any).sendRequest.bind(dp) as (req: any, opts?: any) => Promise<any>;
+
+  // Cancel-before-response: ensure pending map is cleaned and late responses are ignored.
+  const controller = new AbortController();
+  const request = { type: 'Inspect' };
+  const promise = sendRequest(request, { timeoutMs: 1000, signal: controller.signal });
+  const requestId = (dp as any).requestId as number;
+  controller.abort();
+
+  let threwCancelled = false;
+  try {
+    await promise;
+  } catch (error) {
+    threwCancelled = error instanceof DebuggerCancelledError;
+  }
+  assert.equal(threwCancelled, true, 'Expected canceled request to reject with DebuggerCancelledError');
+  assert.equal((dp as any).pendingRequests.size, 0, 'Expected pending request map to be cleared after cancellation');
+
+  // Late response should be ignored (no pending entry to resolve).
+  (dp as any).buffer = `${JSON.stringify({ id: requestId, response: { type: 'Pong' } })}\n`;
+  (dp as any).consumeMessages();
+  assert.equal((dp as any).pendingRequests.size, 0, 'Expected late response to be ignored after cancellation');
+
+  // Cancel-after-timeout: aborting after timeout should be a no-op.
+  const controller2 = new AbortController();
+  let threwTimeout = false;
+  try {
+    await sendRequest({ type: 'GetStorage' }, { timeoutMs: 5, signal: controller2.signal });
+  } catch (error) {
+    threwTimeout = error instanceof DebuggerTimeoutError;
+  }
+  assert.equal(threwTimeout, true, 'Expected request to time out deterministically');
+  controller2.abort();
+  assert.equal((dp as any).pendingRequests.size, 0, 'Expected pending request map to stay empty after aborting post-timeout');
 }
 
 async function runDapHappyPathE2E(

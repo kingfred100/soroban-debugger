@@ -94,6 +94,16 @@ export class DebuggerTimeoutError extends Error {
   }
 }
 
+export class DebuggerCancelledError extends Error {
+  readonly requestType: string;
+
+  constructor(requestType: string) {
+    super(`Cancelled debugger request: ${requestType}`);
+    this.name = 'DebuggerCancelledError';
+    this.requestType = requestType;
+  }
+}
+
 export function formatProtocolMismatchMessage(details: {
   extensionVersion: string;
   backendVersion?: string;
@@ -273,6 +283,28 @@ export class DebuggerProcess {
 
   async getStorage(): Promise<Record<string, unknown>> {
     const response = await this.sendRequest({ type: 'GetStorage' });
+    this.expectResponse(response, 'StorageState');
+    const parsed = JSON.parse(response.storage_json);
+    if (parsed && typeof parsed === 'object') {
+      return parsed as Record<string, unknown>;
+    }
+    return {};
+  }
+
+  async inspectWithCancel(options: { signal?: AbortSignal } = {}): Promise<DebuggerInspection> {
+    const response = await this.sendRequest({ type: 'Inspect' }, { signal: options.signal });
+    this.expectResponse(response, 'InspectionResult');
+    return {
+      function: response.function,
+      args: response.args,
+      stepCount: response.step_count,
+      paused: response.paused,
+      callStack: response.call_stack
+    };
+  }
+
+  async getStorageWithCancel(options: { signal?: AbortSignal } = {}): Promise<Record<string, unknown>> {
+    const response = await this.sendRequest({ type: 'GetStorage' }, { signal: options.signal });
     this.expectResponse(response, 'StorageState');
     const parsed = JSON.parse(response.storage_json);
     if (parsed && typeof parsed === 'object') {
@@ -530,7 +562,7 @@ export class DebuggerProcess {
 
   private async sendRequest(
     request: DebugRequest,
-    options: { timeoutMs?: number } = {}
+    options: { timeoutMs?: number; signal?: AbortSignal } = {}
   ): Promise<DebugResponse> {
     if (!this.socket) {
       throw new Error('Debugger connection is not established');
@@ -542,18 +574,43 @@ export class DebuggerProcess {
 
     const responsePromise = new Promise<DebugResponse>((resolve, reject) => {
       const timeoutMs = options.timeoutMs ?? this.defaultRequestTimeoutMs;
+
+      if (options.signal?.aborted) {
+        reject(new DebuggerCancelledError(request.type));
+        return;
+      }
+
+      let abortHandler: (() => void) | undefined;
+
+      const cleanup = (timer: NodeJS.Timeout) => {
+        clearTimeout(timer);
+        if (abortHandler && options.signal) {
+          options.signal.removeEventListener('abort', abortHandler);
+        }
+      };
+
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
+        cleanup(timer);
         reject(new DebuggerTimeoutError(request.type, timeoutMs));
       }, timeoutMs);
 
+      if (options.signal) {
+        abortHandler = () => {
+          this.pendingRequests.delete(id);
+          cleanup(timer);
+          reject(new DebuggerCancelledError(request.type));
+        };
+        options.signal.addEventListener('abort', abortHandler, { once: true });
+      }
+
       this.pendingRequests.set(id, {
         resolve: (response) => {
-          clearTimeout(timer);
+          cleanup(timer);
           resolve(response);
         },
         reject: (error) => {
-          clearTimeout(timer);
+          cleanup(timer);
           reject(error);
         }
       });

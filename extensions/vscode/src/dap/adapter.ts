@@ -5,7 +5,7 @@ import {
   ExitedEvent} from '@vscode/debugadapter';
 import { DebugProtocol } from '@vscode/debugprotocol';
 import * as readline from 'readline';
-import { DebuggerProcess, DebuggerProcessConfig, DebuggerTimeoutError } from '../cli/debuggerProcess';
+import { DebuggerCancelledError, DebuggerProcess, DebuggerProcessConfig, DebuggerTimeoutError } from '../cli/debuggerProcess';
 import { DebuggerState, Variable } from './protocol';
 import { ResolvedBreakpoint, resolveSourceBreakpoints } from './sourceBreakpoints';
 import { LogOutputEvent, LogLevel } from '@vscode/debugadapter/lib/logger';
@@ -29,6 +29,21 @@ export class SorobanDebugSession extends DebugSession {
   private exportedFunctions = new Set<string>();
   private sourceFunctionBreakpoints = new Map<string, Set<string>>();
   private functionBreakpointRefCounts = new Map<string, number>();
+  private cancellations = new Map<number, AbortController>();
+
+  protected cancelRequest(
+    response: DebugProtocol.CancelResponse,
+    args: DebugProtocol.CancelArguments
+  ): void {
+    const requestId = (args as any).requestId as number | undefined;
+    if (requestId !== undefined) {
+      const controller = this.cancellations.get(requestId);
+      controller?.abort();
+      this.cancellations.delete(requestId);
+    }
+
+    this.sendResponse(response);
+  }
 
   protected initializeRequest(
     response: DebugProtocol.InitializeResponse,
@@ -226,7 +241,9 @@ export class SorobanDebugSession extends DebugSession {
 
     try {
       if (this.debuggerProcess && this.state.isPaused) {
-        await this.refreshState();
+        await this.withCancellation(response.request_seq, async (signal) => {
+          await this.refreshState(signal);
+        });
       }
 
       if (expression === 'args' || expression === 'Arguments') {
@@ -266,6 +283,15 @@ export class SorobanDebugSession extends DebugSession {
 
       throw new Error('Unsupported expression. Try `args`, `storage`, or `storage.<key>`.');
     } catch (error) {
+      if (error instanceof DebuggerCancelledError) {
+        this.sendErrorResponse(response, {
+          id: 1010,
+          format: `Evaluate cancelled.`,
+          showUser: false
+        });
+        return;
+      }
+
       if (error instanceof DebuggerTimeoutError) {
         this.sendErrorResponse(response, {
           id: 1010,
@@ -375,12 +401,20 @@ export class SorobanDebugSession extends DebugSession {
   ): Promise<void> {
     try {
       if (this.debuggerProcess) {
-        await this.refreshState();
+        await this.withCancellation(response.request_seq, async (signal) => {
+          await this.refreshState(signal);
+        });
         this.state.isPaused = true;
         this.sendEvent(new StoppedEvent('entry', this.threadId));
       }
       this.sendResponse(response);
     } catch (error) {
+      if (error instanceof DebuggerCancelledError) {
+        // Cancellation is a normal user action; keep the UI responsive and do not mutate state.
+        this.sendResponse(response);
+        return;
+      }
+
       if (error instanceof DebuggerTimeoutError) {
         this.sendEvent(new LogOutputEvent(
           `[timeout] configurationDone refresh timed out (${error.requestType}).\n` +
@@ -553,14 +587,14 @@ export class SorobanDebugSession extends DebugSession {
     this.sourceFunctionBreakpoints.set(source, nextFunctions);
   }
 
-  private async refreshState(): Promise<void> {
+  private async refreshState(signal?: AbortSignal): Promise<void> {
     if (!this.debuggerProcess) {
       return;
     }
 
     const [inspection, storage] = await Promise.all([
-      this.debuggerProcess.inspect(),
-      this.debuggerProcess.getStorage()
+      this.debuggerProcess.inspectWithCancel({ signal }),
+      this.debuggerProcess.getStorageWithCancel({ signal })
     ]);
 
     this.state.callStack = inspection.callStack.map((frame, index) => {
@@ -595,6 +629,20 @@ export class SorobanDebugSession extends DebugSession {
     });
     this.state.args = inspection.args;
     this.state.variables = this.storageToVariables(storage);
+  }
+
+  private async withCancellation<T>(
+    requestSeq: number,
+    work: (signal: AbortSignal) => Promise<T>
+  ): Promise<T> {
+    const controller = new AbortController();
+    this.cancellations.set(requestSeq, controller);
+
+    try {
+      return await work(controller.signal);
+    } finally {
+      this.cancellations.delete(requestSeq);
+    }
   }
 
   private argsToVariables(args: string | undefined): Variable[] {
