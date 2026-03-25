@@ -1135,7 +1135,11 @@ pub fn compare(args: CompareArgs) -> Result<()> {
     let trace_b = crate::compare::ExecutionTrace::from_file(&args.trace_b)?;
 
     print_info("Comparing traces...");
-    let report = crate::compare::CompareEngine::compare(&trace_a, &trace_b);
+    let filters = crate::compare::engine::CompareFilters::new(
+        args.ignore_path.clone(),
+        args.ignore_field.clone(),
+    )?;
+    let report = crate::compare::CompareEngine::compare_with_filters(&trace_a, &trace_b, &filters);
     let rendered = crate::compare::CompareEngine::render_report(&report);
 
     if let Some(output_path) = &args.output {

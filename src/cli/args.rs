@@ -447,6 +447,16 @@ pub struct CompareArgs {
     /// Output file for the comparison report (default: stdout)
     #[arg(short, long)]
     pub output: Option<PathBuf>,
+
+    /// Ignore a JSON path during comparison. Repeatable. Paths are slash-delimited,
+    /// for example: /storage/fee_pool or /return_value/meta/timestamp
+    #[arg(long, value_name = "PATH")]
+    pub ignore_path: Vec<String>,
+
+    /// Ignore an object field name anywhere in the trace during comparison.
+    /// Repeatable. Useful for timestamps, sequence numbers, and similar metadata.
+    #[arg(long, value_name = "FIELD")]
+    pub ignore_field: Vec<String>,
 }
 
 /// Arguments for the TUI dashboard subcommand
