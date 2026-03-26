@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import {
   DebuggerProcessConfig,
+  getDebuggerVersionInfo,
   LaunchPreflightIssue,
   LaunchPreflightQuickFix,
   validateLaunchConfig,
@@ -24,7 +25,7 @@ class SorobanDebugConfigurationProvider
 {
   async resolveDebugConfiguration(
     folder: vscode.WorkspaceFolder | undefined,
-    config: SorobanLaunchConfig
+    config: SorobanLaunchConfig,
   ): Promise<vscode.DebugConfiguration | null | undefined> {
     if (!config.type && !config.request && !config.name) {
       return this.createDefaultLaunchConfig(folder)
@@ -62,6 +63,7 @@ class SorobanDebugConfigurationProvider
 
 let logManager: LogManager | undefined
 let launchProgressReporter: SorobanLaunchProgressReporter | undefined;
+let versionOutputChannel: vscode.OutputChannel | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   logManager = new LogManager(context)
@@ -69,11 +71,32 @@ export function activate(context: vscode.ExtensionContext): void {
   const factory = new SorobanDebugAdapterDescriptorFactory(context, logManager, launchProgressReporter);
   const configurationProvider = new SorobanDebugConfigurationProvider()
 
+  const sessionStartDisposable = vscode.debug.onDidStartDebugSession(
+    (session) => {
+      if (session.type !== "soroban") {
+        return;
+      }
+
+      showVersionInfo(
+        `backend: unknown protocol: ${WIRE_PROTOCOL_MIN_VERSION}..=${WIRE_PROTOCOL_MAX_VERSION}`,
+      );
+    },
+  );
+
   context.subscriptions.push(
-    vscode.debug.registerDebugAdapterDescriptorFactory('soroban', factory),
-    vscode.debug.registerDebugConfigurationProvider('soroban', configurationProvider),
+    vscode.debug.registerDebugAdapterDescriptorFactory("soroban", factory),
+    vscode.debug.registerDebugConfigurationProvider(
+      "soroban",
+      configurationProvider,
+    ),
+    vscode.commands.registerCommand(
+      RUN_LAUNCH_PREFLIGHT_COMMAND,
+      runStandaloneLaunchPreflight,
+    ),
+    sessionStartDisposable,
+    versionOutputChannel,
     factory,
-    launchProgressReporter
+    launchProgressReporter,
   );
     vscode.commands.registerCommand(RUN_LAUNCH_PREFLIGHT_COMMAND, async () => {
       await runStandaloneLaunchPreflight()
@@ -214,12 +237,12 @@ function createDefaultLaunchConfig(
   workspaceFolder: string
 ): vscode.DebugConfiguration {
   return {
-    name: 'Soroban: Debug Contract',
-    type: 'soroban',
-    request: 'launch',
+    name: "Soroban: Debug Contract",
+    type: "soroban",
+    request: "launch",
     contractPath: `${workspaceFolder}/target/wasm32-unknown-unknown/release/contract.wasm`,
     snapshotPath: `${workspaceFolder}/snapshot.json`,
-    entrypoint: 'main',
+    entrypoint: "main",
     args: [],
     trace: false,
     binaryPath: `${workspaceFolder}/target/debug/${process.platform === 'win32' ? 'soroban-debug.exe' : 'soroban-debug'}`,
@@ -278,7 +301,7 @@ async function runStandaloneLaunchPreflight(): Promise<void> {
 
 async function showPreflightIssueAndApplyFix(
   issue: LaunchPreflightIssue,
-  folder: vscode.WorkspaceFolder | undefined
+  folder: vscode.WorkspaceFolder | undefined,
 ): Promise<void> {
   const actions = issue.quickFixes.map(toQuickPickLabel)
   const selected = await vscode.window.showErrorMessage(
@@ -293,7 +316,7 @@ async function showPreflightIssueAndApplyFix(
 
 async function applyQuickFix(
   quickFix: LaunchPreflightQuickFix,
-  folder: vscode.WorkspaceFolder | undefined
+  folder: vscode.WorkspaceFolder | undefined,
 ): Promise<void> {
   switch (quickFix) {
     case 'pickBinary':

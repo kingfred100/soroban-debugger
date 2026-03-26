@@ -154,6 +154,9 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
+    "test": "node ./dist/test/runTest.js",
+    "build": "npm run compile",
+    "ci": "npm run build && npm run test"
     "test": "npm run test:smoke && npm run test:dap-e2e",
     "test:all": "node ./dist/test/runTest.js",
     "test:smoke": "node ./dist/test/runSmokeTest.js",
