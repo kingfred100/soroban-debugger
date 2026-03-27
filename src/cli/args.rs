@@ -191,6 +191,9 @@ pub enum Commands {
     /// Run a multi-step scenario from a TOML file
     Scenario(ScenarioArgs),
 
+    /// Prune or compact run history according to a retention policy
+    HistoryPrune(HistoryPruneArgs),
+
     /// Plugin-provided subcommand (loaded at runtime)
     #[command(external_subcommand)]
     External(Vec<String>),
@@ -517,6 +520,22 @@ pub struct CompletionsArgs {
     #[arg(value_enum)]
     pub shell: Shell,
 }
+
+#[derive(Parser)]
+pub struct HistoryPruneArgs {
+    /// Keep only the N most-recent records
+    #[arg(long, value_name = "COUNT")]
+    pub max_records: Option<usize>,
+
+    /// Drop records older than N days
+    #[arg(long, value_name = "DAYS")]
+    pub max_age_days: Option<u64>,
+
+    /// Print what would be removed without actually deleting anything
+    #[arg(long)]
+    pub dry_run: bool,
+}
+
 #[derive(Parser)]
 pub struct InspectArgs {
     /// Path to the contract WASM file

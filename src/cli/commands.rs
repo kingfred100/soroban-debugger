@@ -2,9 +2,9 @@ use crate::analyzer::symbolic::SymbolicConfig;
 use crate::analyzer::upgrade::{CompatibilityReport, ExecutionDiff, UpgradeAnalyzer};
 use crate::analyzer::{security::SecurityAnalyzer, symbolic::SymbolicAnalyzer};
 use crate::cli::args::{
-    AnalyzeArgs, CompareArgs, InspectArgs, InteractiveArgs, OptimizeArgs, OutputFormat,
-    ProfileArgs, RemoteArgs, ReplArgs, ReplayArgs, RunArgs, ScenarioArgs, ServerArgs, SymbolicArgs,
-    SymbolicProfile, TuiArgs, UpgradeCheckArgs, Verbosity,
+    AnalyzeArgs, CompareArgs, HistoryPruneArgs, InspectArgs, InteractiveArgs, OptimizeArgs,
+    OutputFormat, ProfileArgs, RemoteArgs, ReplArgs, ReplayArgs, RunArgs, ScenarioArgs, ServerArgs,
+    SymbolicArgs, SymbolicProfile, TuiArgs, UpgradeCheckArgs, Verbosity,
 };
 use crate::debugger::engine::DebuggerEngine;
 use crate::debugger::instruction_pointer::StepMode;
@@ -2227,6 +2227,56 @@ pub fn show_budget_trend(
         }
     }
 
+    Ok(())
+}
+
+/// Prune run history according to retention policy.
+pub fn history_prune(args: HistoryPruneArgs) -> Result<()> {
+    let policy = crate::history::RetentionPolicy {
+        max_records: args.max_records,
+        max_age_days: args.max_age_days,
+    };
+
+    if policy.is_empty() {
+        if !Formatter::is_quiet() {
+            println!("No retention policy specified. Use --max-records and/or --max-age-days.");
+        }
+        return Ok(());
+    }
+
+    let manager = HistoryManager::new()?;
+
+    if args.dry_run {
+        let mut records = manager.load_history()?;
+        let before = records.len();
+        HistoryManager::apply_retention(&mut records, &policy);
+        let remaining = records.len();
+        let removed = before.saturating_sub(remaining);
+
+        if !Formatter::is_quiet() {
+            if removed == 0 {
+                println!("[dry-run] Nothing removed ({} records).", remaining);
+            } else {
+                println!(
+                    "[dry-run] Would remove {} record(s). {} record(s) remaining.",
+                    removed, remaining
+                );
+            }
+        }
+        return Ok(());
+    }
+
+    let report = manager.prune_history(&policy)?;
+    if !Formatter::is_quiet() {
+        if report.removed == 0 {
+            println!("Nothing removed ({} records).", report.remaining);
+        } else {
+            println!(
+                "Removed {} record(s). {} record(s) remaining.",
+                report.removed, report.remaining
+            );
+        }
+    }
     Ok(())
 }
 
