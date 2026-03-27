@@ -1,4 +1,4 @@
-//! Result types and formatting utilities for contract execution.
+﻿//! Result types and formatting utilities for contract execution.
 //!
 //! This module defines the data structures that capture the outcome of a
 //! contract function invocation, including execution traces, storage diffs,
@@ -42,10 +42,10 @@ pub struct InstructionCounts {
 /// In soroban-sdk v22, `try_invoke_contract::<Val, InvokeError>` returns:
 ///   `Result<Result<Val, ConversionError>, Result<InvokeError, InvokeError>>`
 ///
-/// - `Ok(Ok(val))`       → contract returned a value successfully
-/// - `Ok(Err(conv_err))` → return value could not be converted to `Val`
-/// - `Err(Ok(inv_err))`  → contract returned an `InvokeError` (panic/abort)
-/// - `Err(Err(inv_err))` → `InvokeError` itself failed to convert
+/// - `Ok(Ok(val))`       â†’ contract returned a value successfully
+/// - `Ok(Err(conv_err))` â†’ return value could not be converted to `Val`
+/// - `Err(Ok(inv_err))`  â†’ contract returned an `InvokeError` (panic/abort)
+/// - `Err(Err(inv_err))` â†’ `InvokeError` itself failed to convert
 pub(super) fn format_invocation_result(
     invocation_result: &std::result::Result<
         std::result::Result<Val, ConversionError>,
@@ -109,5 +109,28 @@ pub(super) fn format_invocation_result(
                 Err(msg),
             )
         }
+    }
+}
+
+
+impl RuntimeError {
+    /// Create a timeout error with elapsed and limit durations.
+    pub fn timeout(elapsed_ms: u64, limit_ms: u64) -> Self {
+        Self::Timeout { elapsed_ms, limit_ms }
+    }
+
+    /// Create a cancellation error with a reason.
+    pub fn cancelled(reason: impl Into<String>) -> Self {
+        Self::Cancelled { reason: reason.into() }
+    }
+
+    /// Returns true if this error is a timeout.
+    pub fn is_timeout(&self) -> bool {
+        matches!(self, Self::Timeout { .. })
+    }
+
+    /// Returns true if this error is a cancellation.
+    pub fn is_cancelled(&self) -> bool {
+        matches!(self, Self::Cancelled { .. })
     }
 }
