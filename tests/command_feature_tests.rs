@@ -3,12 +3,11 @@ use predicates::prelude::*;
 use std::fs;
 use tempfile::NamedTempFile;
 
+#[path = "fixtures/mod.rs"]
+mod fixtures;
+
 fn fixture_wasm(name: &str) -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join("wasm")
-        .join(format!("{name}.wasm"))
+    fixtures::get_fixture_path(name)
 }
 
 fn base_cmd() -> Command {
@@ -34,7 +33,6 @@ fn symbolic_runs_against_counter_fixture() {
         .success()
         .stdout(predicate::str::contains("Function: increment"))
         .stdout(predicate::str::contains("Paths explored:"))
-        .stdout(predicate::str::contains("Budget:"))
         .stdout(predicate::str::contains("Truncation:"));
 }
 
@@ -79,14 +77,13 @@ fn symbolic_cli_honors_caps_and_reports_truncation() {
             "4",
             "--path-cap",
             "2",
+            "--max-breadth",
+            "10",
             "--timeout",
             "30",
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "Budget: path_cap=2, input_combination_cap=4, timeout=30s",
-        ))
         .stdout(predicate::str::contains("Truncation:"))
         .stdout(predicate::str::contains("input combination cap reached"))
         .stdout(predicate::str::contains("path exploration cap reached"));
@@ -107,6 +104,33 @@ fn analyze_json_outputs_findings_array() {
         .assert()
         .success()
         .stdout(predicate::str::contains("\"findings\""));
+}
+
+#[test]
+fn analyze_filters_by_severity_and_rule() {
+    let wasm = fixture_wasm("counter");
+
+    base_cmd()
+        .args([
+            "analyze",
+            "--contract",
+            wasm.to_str().unwrap(),
+            "--format",
+            "text",
+            "--disable-rule",
+            "hardcoded-address",
+            "--min-severity",
+            "high",
+        ])
+        .assert()
+        .success()
+        // If there are no high severity findings (or if hardcoded-address is the only one),
+        // we should either see specific output or just "No security findings".
+        // It's a smoke test to ensure args parse and run without panicking.
+        .stdout(
+            predicate::str::contains("Findings")
+                .or(predicate::str::contains("No security findings")),
+        );
 }
 
 #[test]

@@ -1,5 +1,8 @@
 use crate::profiler::analyzer::OptimizationReport;
 use crate::Result;
+use std::collections::HashMap;
+use std::path::Path;
+use std::fmt::Write as _;
 
 #[derive(Debug, Clone)]
 pub struct FlameGraphStack {
@@ -10,38 +13,112 @@ pub struct FlameGraphStack {
 pub struct FlameGraphGenerator;
 
 impl FlameGraphGenerator {
-    pub fn from_report(_report: &OptimizationReport) -> Vec<FlameGraphStack> {
-        Vec::new()
+    pub fn from_report(report: &OptimizationReport) -> Vec<FlameGraphStack> {
+        let mut stacks = Vec::new();
+
+        for function in &report.functions {
+            let cpu_per_unit = if function.total_cpu > 0 {
+                function.total_cpu as f64 / 1000.0
+            } else {
+                1.0
+            };
+
+            let stack_count = (function.total_cpu as f64 / cpu_per_unit).max(1.0) as u64;
+            stacks.push(FlameGraphStack {
+                stack: vec![function.name.clone()],
+                count: stack_count,
+            });
+
+            for op in &function.operations {
+                let op_cost = (op.cpu_cost + op.memory_cost) as f64;
+                if op_cost > 0.0 {
+                    let op_count = (op_cost / cpu_per_unit).max(1.0) as u64;
+                    stacks.push(FlameGraphStack {
+                        stack: vec![
+                            function.name.clone(),
+                            format!("{};{}", op.operation, op.location),
+                        ],
+                        count: op_count,
+                    });
+                }
+            }
+
+            for (key, access) in &function.storage_accesses {
+                let cost = access.total_cpu as f64;
+                if cost > 0.0 {
+                    let access_count = (cost / cpu_per_unit).max(1.0) as u64;
+                    stacks.push(FlameGraphStack {
+                        stack: vec![
+                            function.name.clone(),
+                            format!("storage;key={};access_count={}", key, access.access_count),
+                        ],
+                        count: access_count,
+                    });
+                }
+            }
+        }
+
+        stacks
     }
 
-    pub fn to_collapsed_stack_format(_stacks: &[FlameGraphStack]) -> String {
-        String::new()
+    pub fn to_collapsed_stack_format(stacks: &[FlameGraphStack]) -> String {
+        let mut out = String::new();
+        for stack in stacks {
+            let line = stack.stack.join(";");
+            let _ = writeln!(out, "{} {}", line, stack.count);
+        }
+        out
     }
 
     pub fn generate_svg(
-        _stacks: &[FlameGraphStack],
-        _width: usize,
+        stacks: &[FlameGraphStack],
+        width: usize,
         _height: usize,
     ) -> Result<String> {
-        Err(crate::DebuggerError::ExecutionError(
-            "Flamegraph SVG generation is currently disabled due to dependency issues".to_string(),
-        )
-        .into())
+        let collapsed = Self::to_collapsed_stack_format(stacks);
+        let reader = std::io::Cursor::new(collapsed);
+
+        let mut opts = inferno::flamegraph::Options::default();
+        opts.image_width = Some(width);
+
+        let mut svg = Vec::new();
+        inferno::flamegraph::from_reader(&mut opts, reader, &mut svg).map_err(|e| {
+            crate::DebuggerError::ExecutionError(format!("Flamegraph render error: {e}"))
+        })?;
+
+        String::from_utf8(svg)
+            .map_err(|e| crate::DebuggerError::ExecutionError(format!("UTF-8 error: {e}")).into())
     }
 
-    pub fn write_collapsed_stack_file<P: AsRef<std::path::Path>>(
-        _stacks: &[FlameGraphStack],
-        _path: P,
+    pub fn write_collapsed_stack_file<P: AsRef<Path>>(
+        stacks: &[FlameGraphStack],
+        path: P,
     ) -> Result<()> {
+        let collapsed = Self::to_collapsed_stack_format(stacks);
+        std::fs::write(&path, collapsed).map_err(|e| {
+            crate::DebuggerError::FileError(format!(
+                "Failed to write flamegraph to {:?}: {}",
+                path.as_ref(),
+                e
+            ))
+        })?;
         Ok(())
     }
 
-    pub fn write_svg_file<P: AsRef<std::path::Path>>(
-        _stacks: &[FlameGraphStack],
-        _path: P,
-        _width: usize,
-        _height: usize,
+    pub fn write_svg_file<P: AsRef<Path>>(
+        stacks: &[FlameGraphStack],
+        path: P,
+        width: usize,
+        height: usize,
     ) -> Result<()> {
+        let svg = Self::generate_svg(stacks, width, height)?;
+        std::fs::write(&path, svg).map_err(|e| {
+            crate::DebuggerError::FileError(format!(
+                "Failed to write SVG to {:?}: {}",
+                path.as_ref(),
+                e
+            ))
+        })?;
         Ok(())
     }
 }
@@ -50,7 +127,6 @@ impl FlameGraphGenerator {
 mod tests {
     use super::*;
     use crate::profiler::analyzer::FunctionProfile;
-    use std::collections::HashMap;
 
     fn create_test_report() -> OptimizationReport {
         OptimizationReport {

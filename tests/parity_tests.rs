@@ -13,6 +13,8 @@
 
 #![allow(deprecated)]
 
+mod network;
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
@@ -281,6 +283,11 @@ fn parity_shared_function_breakpoint_accepted() {
 /// the `token` field in launch.json.
 #[test]
 fn parity_dap_server_starts_and_accepts_connection() {
+    if !network::can_bind_loopback() {
+        eprintln!("Skipping parity_dap_server_starts_and_accepts_connection: loopback restricted");
+        return;
+    }
+
     use std::io::{BufRead, BufReader, Write};
     use std::net::TcpStream;
     use std::time::Duration;
@@ -347,6 +354,11 @@ fn parity_dap_server_starts_and_accepts_connection() {
 /// that the extension depends on when `token` is set in launch.json.
 #[test]
 fn parity_dap_server_rejects_invalid_token() {
+    if !network::can_bind_loopback() {
+        eprintln!("Skipping parity_dap_server_rejects_invalid_token: loopback restricted");
+        return;
+    }
+
     use std::io::{BufRead, BufReader, Write};
     use std::net::TcpStream;
     use std::time::Duration;

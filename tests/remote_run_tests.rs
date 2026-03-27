@@ -1,7 +1,9 @@
-use std::time::Duration;
-use std::path::PathBuf;
 use assert_cmd::Command;
+use assert_cmd::cargo::CommandCargoExt;
 use predicates::prelude::*;
+use std::path::PathBuf;
+use std::process::Command as StdCommand;
+use std::time::Duration;
 
 #[test]
 fn test_remote_run_execution() {
@@ -21,19 +23,14 @@ fn test_remote_run_execution() {
 
         let fixtures_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
         if cfg!(windows) {
-            let status = std::process::Command::new("powershell")
+            let status = StdCommand::new("powershell")
                 .current_dir(&fixtures_dir)
-                .args([
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    "build.ps1",
-                ])
+                .args(["-ExecutionPolicy", "Bypass", "-File", "build.ps1"])
                 .status()
                 .expect("Failed to run build.ps1");
             assert!(status.success(), "build.ps1 failed");
         } else {
-            let status = std::process::Command::new("bash")
+            let status = StdCommand::new("bash")
                 .current_dir(&fixtures_dir)
                 .args(["./build.sh"])
                 .status()
@@ -50,7 +47,8 @@ fn test_remote_run_execution() {
     }
 
     // Start server in background
-    let mut server_cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("soroban-debug"));
+    let mut server_cmd = StdCommand::cargo_bin("soroban-debug").unwrap();
+
     let mut server_child = server_cmd
         .arg("server")
         .arg("--port")
@@ -93,10 +91,9 @@ fn test_remote_run_execution() {
 
     // Kill server
     server_child.kill().unwrap();
+    let _ = server_child.wait();
 
     // The counter.wasm might just output 1 on first increment
     // Let's just assert that it executed successfully rather than checking the exact value if we are unsure
-    assert
-        .success()
-        .stdout(predicate::str::contains("Result:"));
+    assert.success().stdout(predicate::str::contains("Result:"));
 }

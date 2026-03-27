@@ -314,6 +314,28 @@ currently available.
 | `expected_storage` | table | Assert specific storage keys have these values after the step |
 | `budget_limits` | table | Assert CPU/memory usage stays within `max_cpu_instructions`/`max_memory_bytes` |
 
+### Source Map Caching
+
+When stepping through a contract the debugger maps WASM byte offsets to Rust
+source locations by parsing the embedded DWARF debug sections.  Parsing is
+O(WASM size) and was previously repeated on every `enable_instruction_debug`
+call, which became expensive during long stepping sessions.
+
+The source map is now cached per `DebuggerEngine` instance using a fast FNV-1a
+hash of the WASM bytes as the cache key:
+
+- **Cache hit** (same bytes): DWARF sections are not re-parsed; the existing
+  offset → source-location map is returned immediately.
+- **Cache miss** (bytes changed or first load): a full parse is performed and
+  the result is stored under the new hash.  This handles contract upgrades
+  and re-deployments transparently.
+- **Explicit invalidation**: call `source_map.invalidate_cache()` if you need
+  to force a re-parse even when the bytes appear identical.
+
+No user-facing flags are needed — the cache is managed automatically.  The
+`SourceMap::parse_count()` method is available to library users and tests for
+verifying that caching is active.
+
 ### Storage Filtering
 
 Filter large storage outputs by key pattern using `--storage-filter`:
@@ -896,21 +918,34 @@ Use structured JSON output for automation/CI with the `run` command:
 soroban-debug run --contract <path/to/contract.wasm> --function <fn> --output json
 ```
 
-Example output:
+Versioned envelope (stable contract across major machine-readable commands):
 
 ```json
 {
+  "schema_version": "1.0.0",
+  "command": "run",
   "status": "success",
   "result": {
-    "value": "42"
+    "result": "I64(42)",
+    "sha256": "4c29...<64 hex chars>...",
+    "budget": {
+      "cpu_instructions": 1200,
+      "memory_bytes": 2048
+    },
+    "storage_diff": {
+      "added": {},
+      "modified": {},
+      "deleted": []
+    }
   },
-  "budget": {
-    "cpu_instructions": 1200,
-    "memory_bytes": 2048
-  },
-  "errors": null
+  "error": null
 }
 ```
+
+Compatibility expectations:
+- `schema_version` is always present.
+- Within the same schema version, output changes are additive only.
+- Breaking output contract changes require a schema version bump.
 
 Default output mode remains pretty, human-readable output:
 

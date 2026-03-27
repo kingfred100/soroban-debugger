@@ -1,4 +1,4 @@
-use crate::debugger::breakpoint::BreakpointManager;
+﻿use crate::debugger::breakpoint::BreakpointManager;
 use crate::debugger::instruction_pointer::StepMode;
 use crate::debugger::source_map::{SourceLocation, SourceMap};
 use crate::debugger::state::DebugState;
@@ -29,6 +29,12 @@ pub struct DebuggerEngine {
 }
 
 impl DebuggerEngine {
+        /// Returns the current paused source location (file, line, column) if available.
+        pub fn current_source_location(&self) -> Option<crate::debugger::source_map::SourceLocation> {
+            let state = self.state.lock().ok()?;
+            let inst = state.current_instruction()?;
+            self.lookup_source_location(inst.offset)
+        }
     /// Create a new debugger engine.
     #[tracing::instrument(skip_all)]
     pub fn new(executor: ContractExecutor, initial_breakpoints: Vec<String>) -> Self {
@@ -55,13 +61,18 @@ impl DebuggerEngine {
     ///
     /// Missing or malformed debug information does not fail execution; it simply leaves the
     /// engine without source mappings.
+    ///
+    /// The existing `SourceMap` instance is **reused** across calls so that its
+    /// internal parse cache is preserved.  If the WASM bytes have not changed
+    /// since the last load, the DWARF sections are not re-parsed.
     pub fn try_load_source_map(&mut self, wasm_bytes: &[u8]) {
-        let mut source_map = SourceMap::new();
+        // Reuse the existing instance to keep the hash-based parse cache alive.
+        let mut source_map = self.source_map.take().unwrap_or_default();
         match source_map.load(wasm_bytes) {
-            Ok(()) if !source_map.is_empty() => {
+            Ok(()) => {
                 self.source_map = Some(source_map);
             }
-            _ => {
+            Err(_) => {
                 self.source_map = None;
             }
         }
@@ -100,7 +111,8 @@ impl DebuggerEngine {
     }
 
     pub fn load_source_map(&mut self, wasm_bytes: &[u8]) -> Result<()> {
-        let mut source_map = SourceMap::new();
+        // Reuse the existing instance to keep the hash-based parse cache alive.
+        let mut source_map = self.source_map.take().unwrap_or_default();
         source_map.load(wasm_bytes)?;
         self.source_map = Some(source_map);
         Ok(())
