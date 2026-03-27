@@ -9,7 +9,7 @@
 #   test-vscode Run VS Code extension tests
 #   ci-local    Run all practical gates developers must satisfy before pushing
 
-.PHONY: all build fmt lint test-rust test-vscode ci-local clean regen-man check-man
+.PHONY: all build fmt lint test-rust test-vscode ci-local ci-sandbox clean regen-man check-man
 
 all: build
 
@@ -46,6 +46,11 @@ ci-local: fmt lint test-rust test-vscode check-man
 	@echo "======================================="
 	@echo "✅ All local CI gates passed successfully!"
 	@echo "======================================="
+
+# Sandbox-safe local gate for restricted environments.
+# Runs deterministic checks and explicitly reports skipped network/temp-dependent gates.
+ci-sandbox:
+	@bash run_local_ci.sh --sandbox
 
 clean:
 	cargo clean

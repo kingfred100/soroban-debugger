@@ -672,6 +672,16 @@ async function runDapHappyPathE2E(
       false,
       "Expected heuristic source mapping to be unverified",
     );
+    assert.equal(
+      setBps.body?.breakpoints?.[0]?.reasonCode,
+      "HEURISTIC_NO_DWARF",
+      "Expected heuristic reason code on source breakpoint response",
+    );
+    assert.match(
+      String(setBps.body?.breakpoints?.[0]?.message || ""),
+      /HEURISTIC_NO_DWARF/,
+      "Expected breakpoint message to include heuristic reason code",
+    );
 
     const configDone = await client.request("configurationDone", {});
     assert.equal(

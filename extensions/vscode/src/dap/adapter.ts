@@ -58,6 +58,26 @@ function parseRuntimeError(error: unknown): StructuredRuntimeError {
 }
 type LaunchRequestArgs = DebugProtocol.LaunchRequestArguments & DebuggerProcessConfig;
 
+type BreakpointResolutionLogRecord = {
+  source: string;
+  requestedLine: number;
+  resolvedLine: number;
+  functionName?: string;
+  verified: boolean;
+  setBreakpoint: boolean;
+  reasonCode?: string;
+  message?: string;
+};
+
+type BreakpointSyncLogRecord = {
+  source: string;
+  action: 'clear' | 'set';
+  breakpointId: string;
+  functionName?: string;
+  success: boolean;
+  error?: string;
+};
+
 export class SorobanDebugSession extends DebugSession {
   private logManager: LogManager | undefined;
   private debuggerProcess: DebuggerProcess | null = null;
@@ -231,6 +251,25 @@ export class SorobanDebugSession extends DebugSession {
         };
       });
 
+      for (const bp of breakpoints) {
+        const match = resolved.find((resolvedBreakpoint) => resolvedBreakpoint.requestedLine === bp.line);
+        const resolutionRecord: BreakpointResolutionLogRecord = {
+          source,
+          requestedLine: bp.line,
+          resolvedLine: match?.line ?? bp.line,
+          functionName: match?.functionName,
+          verified: match?.verified ?? false,
+          setBreakpoint: Boolean(match?.setBreakpoint && match?.functionName),
+          reasonCode: match?.reasonCode,
+          message: match?.message,
+        };
+        this.logManager?.log(
+          ManagerLogLevel.Debug,
+          LogPhase.DAP,
+          `BREAKPOINT_RESOLUTION ${JSON.stringify(resolutionRecord)}`
+        );
+      }
+
       const syncErrors = await this.syncSourceBreakpoints(
         source,
         managedBreakpoints.filter((bp) => {
@@ -259,12 +298,18 @@ export class SorobanDebugSession extends DebugSession {
           const mbp = managedBreakpoints.find(m => m.line === bp.line);
           const syncMessage = mbp ? syncErrors.get(mbp.id) : undefined;
           const capabilityMessages = this.describeCapabilityFallback(bp);
+          const reasonCode = match?.reasonCode;
+          const reasonMessage = match?.message;
+          const composedMessage = reasonCode
+            ? `${reasonCode}: ${reasonMessage ?? 'No additional diagnostic message'}`
+            : reasonMessage;
           return {
             verified: match?.verified ?? false,
             line: match?.line ?? bp.line,
             column: bp.column,
             source: args.source,
-            message: match?.message,
+            message: composedMessage,
+            reasonCode,
           }
         })
       };
@@ -725,6 +770,18 @@ export class SorobanDebugSession extends DebugSession {
 
     for (const breakpoint of previousBreakpoints) {
       await this.debuggerProcess.clearBreakpoint(breakpoint.id);
+      const clearRecord: BreakpointSyncLogRecord = {
+        source,
+        action: 'clear',
+        breakpointId: breakpoint.id,
+        functionName: breakpoint.functionName,
+        success: true,
+      };
+      this.logManager?.log(
+        ManagerLogLevel.Debug,
+        LogPhase.DAP,
+        `BREAKPOINT_SYNC ${JSON.stringify(clearRecord)}`
+      );
     }
 
     for (const breakpoint of nextBreakpoints) {
@@ -736,10 +793,36 @@ export class SorobanDebugSession extends DebugSession {
           hitCondition: breakpoint.hitCondition,
           logMessage: breakpoint.logMessage
         });
+        const setRecord: BreakpointSyncLogRecord = {
+          source,
+          action: 'set',
+          breakpointId: breakpoint.id,
+          functionName: breakpoint.functionName,
+          success: true,
+        };
+        this.logManager?.log(
+          ManagerLogLevel.Debug,
+          LogPhase.DAP,
+          `BREAKPOINT_SYNC ${JSON.stringify(setRecord)}`
+        );
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         errors.set(
           breakpoint.id,
-          error instanceof Error ? error.message : String(error)
+          errorMessage
+        );
+        const setRecord: BreakpointSyncLogRecord = {
+          source,
+          action: 'set',
+          breakpointId: breakpoint.id,
+          functionName: breakpoint.functionName,
+          success: false,
+          error: errorMessage,
+        };
+        this.logManager?.log(
+          ManagerLogLevel.Debug,
+          LogPhase.DAP,
+          `BREAKPOINT_SYNC ${JSON.stringify(setRecord)}`
         );
       }
     }

@@ -86,3 +86,19 @@ Use these launch settings when the adapter is healthy but the backend is slow:
 3. Increase the narrowest timeout that matches the failing request.
 4. Enable CLI verbose logging or VS Code trace logging.
 5. Only after that, broaden global timeouts or retry windows.
+
+## Restricted Environments and `ci-sandbox`
+
+If you are running local checks in CI containers, hardened desktops, or other restricted environments, use the sandbox-safe local gate:
+
+```bash
+make ci-sandbox
+```
+
+What this does:
+
+- Runs deterministic Rust checks (`fmt`, `clippy`, `test`) in a predictable order.
+- Exits successfully when those checks pass.
+- Explicitly reports skipped gates that depend on local loopback networking or writable temp-dir behavior.
+
+Use `ci-local` when your environment has full local networking and temp-dir support; use `ci-sandbox` when it does not.
