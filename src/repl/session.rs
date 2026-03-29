@@ -116,9 +116,15 @@ impl Completer for ReplHelper {
 impl ReplSession {
     /// Create a new REPL session
     pub fn new(config: ReplConfig) -> Result<Self> {
-        let history_path = dirs::home_dir()
-            .unwrap_or_else(std::env::temp_dir)
-            .join(".soroban_repl_history");
+        let history_base_dir = dirs::home_dir().unwrap_or_else(|| {
+            let fallback_dir = std::env::temp_dir();
+            tracing::warn!(
+                "HOME directory is unavailable; REPL history will be stored in temporary directory: {}",
+                fallback_dir.display()
+            );
+            fallback_dir
+        });
+        let history_path = history_base_dir.join(".soroban_repl_history");
 
         let executor = ReplExecutor::new(&config)?;
         let helper = ReplHelper::new(
