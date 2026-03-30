@@ -2276,6 +2276,7 @@ pub async fn repl(args: ReplArgs) -> Result<()> {
         contract_path: args.contract,
         network_snapshot: args.network_snapshot,
         storage: args.storage,
+        watch_keys: args.watch_keys,
     })
     .await
 }

@@ -527,6 +527,13 @@ pub struct ReplArgs {
     /// Expected SHA-256 hash of the WASM file. If provided, loading will fail if the computed hash does not match.
     #[arg(long)]
     pub expected_hash: Option<String>,
+
+    /// Filter storage output by key pattern (repeatable). Supports:
+    ///   prefix*       — match keys starting with prefix
+    ///   re:<regex>    — match keys by regex
+    ///   exact_key     — match key exactly
+    #[arg(long, value_name = "PATTERN")]
+    pub watch_keys: Vec<String>,
 }
 
 impl ReplArgs {

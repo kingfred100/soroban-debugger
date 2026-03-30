@@ -17,6 +17,7 @@ pub struct ReplExecutor {
     engine: crate::debugger::engine::DebuggerEngine,
     signatures: HashMap<String, ContractFunctionSignature>,
     address_aliases: HashMap<String, String>,
+    watch_keys: Vec<String>,
 }
 
 impl ReplExecutor {
@@ -56,6 +57,7 @@ impl ReplExecutor {
             engine,
             signatures,
             address_aliases: HashMap::new(),
+            watch_keys: config.watch_keys.clone(),
         })
     }
 
@@ -87,7 +89,8 @@ impl ReplExecutor {
             crate::logging::LogLevel::Info,
         );
 
-        let diff = StorageInspector::compute_diff(&storage_before, &storage_after, &[]);
+        let watch_refs: Vec<&str> = self.watch_keys.iter().map(|s| s.as_str()).collect();
+        let diff = StorageInspector::compute_diff(&storage_before, &storage_after, &watch_refs);
         if diff.is_empty() {
             crate::logging::log_display("Storage: (no changes)", crate::logging::LogLevel::Info);
         } else {
