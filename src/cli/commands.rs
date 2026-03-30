@@ -722,10 +722,6 @@ pub fn run(args: RunArgs, verbosity: Verbosity) -> Result<()> {
         crate::inspector::storage::StorageInspector::display_diff(&storage_diff);
     }
 
-    if let Some(export_path) = &args.export_storage {
-        print_info(format!("\nExporting storage to: {:?}", export_path));
-        crate::inspector::storage::StorageState::export_to_file(&storage_after, export_path)?;
-    }
     let mock_calls = engine.executor().get_mock_call_log();
     if !args.mock.is_empty() {
         display_mock_call_log(&mock_calls);
