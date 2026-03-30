@@ -452,6 +452,9 @@ impl LoadedPlugin {
             manifest,
             trust,
         }
+    }
+}
+
 /// Checks if the plugin API version matches the host's expected version.
 pub fn check_api_version(plugin_version: u32) -> Result<(), crate::plugin::api::PluginError> {
     use crate::plugin::api::{PluginError, PLUGIN_API_VERSION};
@@ -463,7 +466,6 @@ pub fn check_api_version(plugin_version: u32) -> Result<(), crate::plugin::api::
     }
     Ok(())
 }
-    } }
 
 #[cfg(test)]
 mod tests {
