@@ -537,6 +537,12 @@ pub fn run(args: RunArgs, verbosity: Verbosity) -> Result<()> {
                 tls_key: args.tls_key.clone(),
                 tls_ca: None, // RunArgs doesn't have tls_ca, but RemoteArgs does
                 args: args.args.clone(),
+                tls_cert: args.tls_cert.clone(),
+                tls_key: args.tls_key.clone(),
+                tls_ca: args.tls_ca.clone(),
+                timeout_ms: args.timeout * 1000,
+                max_retries: 3,
+                retry_delay_ms: 200,
             },
             verbosity,
         );
@@ -1845,6 +1851,9 @@ pub fn remote(args: RemoteArgs, _verbosity: Verbosity) -> Result<()> {
     config.tls_cert = args.tls_cert.clone();
     config.tls_key = args.tls_key.clone();
     config.tls_ca = args.tls_ca.clone();
+    config.timeouts.default = std::time::Duration::from_millis(args.timeout_ms);
+    config.retry.max_attempts = args.max_retries;
+    config.retry.base_delay = std::time::Duration::from_millis(args.retry_delay_ms);
     let mut client = crate::client::RemoteClient::connect_with_config(&args.remote, args.token.clone(), config)?;
 
     if let Some(contract) = &args.contract {
