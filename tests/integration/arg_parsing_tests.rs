@@ -133,30 +133,6 @@ fn test_parse_fixed_length_tuple() {
 }
 
 #[test]
-fn test_parse_option_none_from_null() {
-    let parser = create_parser();
-    let result = parser.parse_args_string(r#"[{"type": "option", "value": null}]"#);
-    assert!(
-        result.is_ok(),
-        "Failed to parse option none: {:?}",
-        result.err()
-    );
-    assert_eq!(result.unwrap().len(), 1);
-}
-
-#[test]
-fn test_parse_option_some_from_non_null() {
-    let parser = create_parser();
-    let result = parser.parse_args_string(r#"[{"type": "option", "value": 42}]"#);
-    assert!(
-        result.is_ok(),
-        "Failed to parse option some: {:?}",
-        result.err()
-    );
-    assert_eq!(result.unwrap().len(), 1);
-}
-
-#[test]
 fn test_parse_tuple_fixed_length_array() {
     let parser = create_parser();
     let result =

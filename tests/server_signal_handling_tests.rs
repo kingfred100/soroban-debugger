@@ -51,15 +51,19 @@ fn test_server_rejects_partial_tls_configuration() {
 fn test_server_accepts_both_tls_paths_for_loading() {
     let fake_cert = Path::new("tests/fixtures/cert.pem");
     let fake_key = Path::new("tests/fixtures/key.pem");
-    let err = DebugServer::new(
+    let result = DebugServer::new(
         "127.0.0.1".to_string(),
         None,
         Some(fake_cert),
         Some(fake_key),
         None,
         Vec::new(),
-    )
-    .expect_err("expected missing fixture files to fail during TLS load");
+    );
+    assert!(
+        result.is_err(),
+        "expected missing fixture files to fail during TLS load"
+    );
+    let err = result.err().unwrap_or_else(|| miette::miette!("missing error"));
 
     assert!(
         !err.to_string()
