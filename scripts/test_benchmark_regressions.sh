@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SOURCE_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check_benchmark_regressions.sh"
-TEST_ROOT="$(mktemp -d)"
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/bench-regression-test.XXXXXX")"
 
 cleanup() {
     rm -rf "$TEST_ROOT"
@@ -48,47 +48,72 @@ write_fake_cargo() {
 #!/usr/bin/env bash
 set -euo pipefail
 
-baseline=""
-args=("\$@")
-for ((i = 0; i < \${#args[@]}; i++)); do
-    if [ "\${args[\$i]}" = "--save-baseline" ]; then
-        baseline="\${args[\$((i + 1))]}"
-        break
-    fi
-done
-
-if [ -z "\$baseline" ]; then
-    echo "missing --save-baseline" >&2
-    exit 1
-fi
-
 branch_value="\$(cat branch.txt)"
-printf 'cargo|%s|%s\\n' "\$baseline" "\$PWD|\$branch_value" >> "\$LOG_FILE"
 
-if [ "${mode}" = "fail-base" ] && [ "\$baseline" = "base" ]; then
-    echo "simulated baseline benchmark failure" >&2
-    exit 42
+if [ "\$1" = "bench" ]; then
+    printf 'cargo-bench|%s|%s|%s\\n' "\$PWD|\$branch_value" "\$CARGO_TARGET_DIR" "\$*" >> "\$LOG_FILE"
+    if [ "${mode}" = "fail-base" ] && [ "\$branch_value" = "main" ]; then
+        echo "simulated baseline benchmark failure" >&2
+        exit 42
+    fi
+    mkdir -p "\$CARGO_TARGET_DIR/criterion/fake"
+    printf '%s\\n' "\$branch_value" > "\$CARGO_TARGET_DIR/criterion/fake/source.txt"
+    exit 0
 fi
 
-mkdir -p "\$CARGO_TARGET_DIR/criterion/fake/\$baseline"
-printf '%s\\n' "\$branch_value" > "\$CARGO_TARGET_DIR/criterion/fake/\$baseline/source.txt"
+if [ "\$1" = "run" ]; then
+    all_args="\$*"
+    shift
+    cmd=""
+    criterion=""
+    out=""
+    baseline=""
+    current=""
+    while [ "\$#" -gt 0 ]; do
+        arg="\$1"
+        shift
+        case "\$arg" in
+            record|compare)
+                cmd="\$arg"
+                ;;
+            --criterion)
+                criterion="\${1:-}"
+                [ "\$#" -gt 0 ] && shift
+                ;;
+            --out)
+                out="\${1:-}"
+                [ "\$#" -gt 0 ] && shift
+                ;;
+            --baseline)
+                baseline="\${1:-}"
+                [ "\$#" -gt 0 ] && shift
+                ;;
+            --current)
+                current="\${1:-}"
+                [ "\$#" -gt 0 ] && shift
+                ;;
+        esac
+    done
+
+    if [ "\$cmd" = "record" ]; then
+        printf 'cargo-record|%s|%s|%s|%s\\n' "\$PWD|\$branch_value" "\$criterion" "\$out" "\$all_args" >> "\$LOG_FILE"
+        printf '{"benchmarks":[{"id":"fake","mean":1.0}],"source":"%s"}\n' "\$branch_value" > "\$out"
+        exit 0
+    fi
+
+    if [ "\$cmd" = "compare" ]; then
+        printf 'cargo-compare|%s|%s|%s|%s\\n' "\$PWD|\$branch_value" "\$baseline" "\$current" "\$all_args" >> "\$LOG_FILE"
+        test -f "\$baseline"
+        test -f "\$current"
+        echo "comparison ok"
+        exit 0
+    fi
+fi
+
+echo "unexpected cargo invocation: \$*" >&2
+exit 1
 EOF
     chmod +x "$bin_dir/cargo"
-}
-
-write_fake_critcmp() {
-    local bin_dir="$1"
-
-    cat > "$bin_dir/critcmp" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-
-printf 'critcmp|%s\n' "$PWD" >> "$LOG_FILE"
-test -f "$PWD/target/criterion/fake/base/source.txt"
-test -f "$PWD/target/criterion/fake/new/source.txt"
-printf 'comparison ok\n'
-EOF
-    chmod +x "$bin_dir/critcmp"
 }
 
 run_success_case() {
@@ -103,8 +128,6 @@ run_success_case() {
     bin_dir="${paths#*|}"
 
     write_fake_cargo "$bin_dir" "pass"
-    write_fake_critcmp "$bin_dir"
-
     LOG_FILE="$log_file" PATH="$bin_dir:$PATH" bash "$repo_root/scripts/check_benchmark_regressions.sh" >/dev/null
 
     if [ "$(git -C "$repo_root" branch --show-current)" != "feature" ]; then
@@ -112,20 +135,32 @@ run_success_case() {
         exit 1
     fi
 
-    if ! grep -Fq "cargo|new|$repo_root|feature" "$log_file"; then
-        echo "expected current benchmark run in feature checkout" >&2
+    if ! grep -Eq "cargo-bench\\|$repo_root\\|feature\\|.*/current-target\\|" "$log_file"; then
+        echo "expected current benchmark bench run in feature checkout" >&2
         cat "$log_file" >&2
         exit 1
     fi
 
-    if ! grep -Eq "cargo\|base\|.*/baseline-worktree\|main" "$log_file"; then
-        echo "expected baseline benchmark run in detached worktree" >&2
+    if ! grep -Eq "cargo-bench\\|.*/baseline-worktree\\|main\\|.*/baseline-target\\|" "$log_file"; then
+        echo "expected baseline benchmark bench run in detached worktree" >&2
         cat "$log_file" >&2
         exit 1
     fi
 
-    if ! grep -Eq "critcmp\|.*/critcmp-root" "$log_file"; then
-        echo "expected critcmp run from isolated comparison root" >&2
+    if ! grep -Eq "cargo-record\\|$repo_root\\|feature\\|.*/current-target/criterion\\|.*/current\\.json\\|" "$log_file"; then
+        echo "expected current record command in feature checkout" >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
+
+    if ! grep -Eq "cargo-record\\|.*/baseline-worktree\\|main\\|.*/baseline-target/criterion\\|.*/baseline\\.json\\|" "$log_file"; then
+        echo "expected baseline record command in detached worktree" >&2
+        cat "$log_file" >&2
+        exit 1
+    fi
+
+    if ! grep -Eq "cargo-compare\\|$repo_root\\|feature\\|.*/baseline\\.json\\|.*/current\\.json\\|" "$log_file"; then
+        echo "expected compare command to run in feature checkout" >&2
         cat "$log_file" >&2
         exit 1
     fi
@@ -145,8 +180,6 @@ run_failure_cleanup_case() {
     bin_dir="${paths#*|}"
 
     write_fake_cargo "$bin_dir" "fail-base"
-    write_fake_critcmp "$bin_dir"
-
     set +e
     LOG_FILE="$case_root/invocations.log" PATH="$bin_dir:$PATH" bash "$repo_root/scripts/check_benchmark_regressions.sh" >"$output_file" 2>&1
     status=$?

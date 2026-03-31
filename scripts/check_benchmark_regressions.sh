@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs the benchmark regression gate without mutating the caller's checkout.
 # It benchmarks the current tree, benchmarks a baseline ref in a temporary
-# detached worktree, and compares the saved Criterion baselines with critcmp.
+# detached worktree, and compares saved Criterion baselines via `bench-regression`.
 #
 # Usage:
 #   bash scripts/check_benchmark_regressions.sh
@@ -10,9 +10,7 @@
 #
 # Optional environment variables:
 #   BASELINE_REF            Git ref to benchmark as the baseline.
-#   BENCHMARK_THRESHOLD     critcmp percentage threshold (default: 10).
-#   CURRENT_BASELINE_NAME   Criterion baseline name for the current tree.
-#   BASELINE_NAME           Criterion baseline name for the baseline ref.
+#   BENCHMARK_THRESHOLD     Warning threshold percentage (default: 10).
 
 set -euo pipefail
 
@@ -148,7 +146,7 @@ if [ -z "${BASELINE_REF:-}" ]; then
     fi
 fi
 
-TEMP_DIR="$(mktemp -d)"
+TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/bench-regression.XXXXXX")"
 WORKTREE_DIR="$TEMP_DIR/baseline-worktree"
 WORKTREE_ADDED=0
 
@@ -185,12 +183,6 @@ cleanup() {
 }
 
 trap cleanup EXIT
-
-if ! command -v critcmp >/dev/null 2>&1; then
-    echo "critcmp is required but was not found on PATH."
-    echo "Install it with: cargo install critcmp --version 0.1.7"
-    exit 2
-fi
 
 log "baseline ref: $BASELINE_REF"
 log "adding detached worktree"
@@ -238,32 +230,6 @@ set -e
 echo "$output"
 
 if [ "$status" -eq 0 ]; then
-    exit 0
-fi
-
-cp -R "$BENCH_TARGET_DIR/criterion" "$CRITCMP_ROOT/target/criterion"
-
-log "comparing baselines with critcmp (threshold: ${BENCHMARK_THRESHOLD}%)"
-(
-    cd "$CRITCMP_ROOT"
-
-    set +e
-    output="$(critcmp "$BASELINE_NAME" "$CURRENT_BASELINE_NAME" --threshold "$BENCHMARK_THRESHOLD" 2>&1)"
-    status=$?
-    set -e
-
-    echo "$output"
-
-    if [ "$status" -eq 0 ]; then
-        exit 0
-    fi
-
-    if echo "$output" | grep -Fq "no benchmark comparisons to show"; then
-        echo "No overlapping benchmark IDs between '$BASELINE_NAME' and '$CURRENT_BASELINE_NAME'; skipping regression gate."
-        exit 0
-    fi
-if echo "$output" | grep -Fq "no benchmark comparisons to show"; then
-    echo "No overlapping benchmark IDs; skipping regression gate."
     exit 0
 fi
 

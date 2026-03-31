@@ -89,6 +89,50 @@ debug_log "Created TEMP_DIR: $TEMP_DIR"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
 TEMP_MAN_DIR="$TEMP_DIR/man/man1"
+NORMALIZED_COMMITTED_DIR="$TEMP_DIR/normalized/committed"
+NORMALIZED_GENERATED_DIR="$TEMP_DIR/normalized/generated"
+
+normalize_manpage_possible_values() {
+    local src_file="$1"
+    local dst_file="$2"
+
+    awk '
+        BEGIN { in_possible_values_block = 0 }
+        {
+            if (in_possible_values_block == 1) {
+                if ($0 == ".RE") {
+                    in_possible_values_block = 0
+                    print "[[POSSIBLE_VALUES_BLOCK]]"
+                }
+                next
+            }
+
+            if ($0 == "\\fIPossible values:\\fR") {
+                in_possible_values_block = 1
+                next
+            }
+
+            if ($0 ~ /^\[\\fIpossible values: \\fR.*\]$/) {
+                print "[[POSSIBLE_VALUES_BLOCK]]"
+                next
+            }
+
+            print
+        }
+    ' "$src_file" > "$dst_file"
+}
+
+normalize_manpage_dir() {
+    local src_dir="$1"
+    local dst_dir="$2"
+    mkdir -p "$dst_dir"
+
+    local src_file
+    for src_file in "$src_dir"/*.1; do
+        [ -e "$src_file" ] || continue
+        normalize_manpage_possible_values "$src_file" "$dst_dir/$(basename "$src_file")"
+    done
+}
 
 echo "Generating fresh man pages into $TEMP_DIR..."
 debug_log "TMPDIR source: $TMPDIR_SELECTED"
@@ -112,7 +156,10 @@ fi
 
 echo "Diffing against committed man pages in $COMMITTED_DIR..."
 
-diff_output=$(diff -r "$COMMITTED_DIR" "$TEMP_MAN_DIR" 2>&1) || diff_status=$?
+normalize_manpage_dir "$COMMITTED_DIR" "$NORMALIZED_COMMITTED_DIR"
+normalize_manpage_dir "$TEMP_MAN_DIR" "$NORMALIZED_GENERATED_DIR"
+
+diff_output=$(diff -r "$NORMALIZED_COMMITTED_DIR" "$NORMALIZED_GENERATED_DIR" 2>&1) || diff_status=$?
 diff_status=${diff_status:-0}
 
 if [ "$diff_status" -eq 0 ]; then

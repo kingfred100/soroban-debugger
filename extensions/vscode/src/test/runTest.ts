@@ -466,7 +466,7 @@ async function main(): Promise<void> {
     });
     await assert.rejects(
       timedOut,
-      (error: any) => error?.name === "TimeoutError",
+      (error: any) => error instanceof DebuggerTimeoutError,
     );
 
     await wait(250);
