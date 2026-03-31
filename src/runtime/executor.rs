@@ -655,10 +655,24 @@ fn tuple_arity_from_type_name(type_name: &str) -> Option<usize> {
         return None;
     }
 
-    let inner = &type_name[6..type_name.len() - 1];
     let inner = type_name.strip_prefix("Tuple<")?.strip_suffix('>')?;
     if inner.trim().is_empty() {
         return Some(0);
+    }
+
+    let mut count = 1usize;
+    let mut depth = 0usize;
+    for ch in inner.chars() {
+        match ch {
+            '<' => depth += 1,
+            '>' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => count += 1,
+            _ => {}
+        }
+    }
+    Some(count)
+}
+
 impl Default for CancellationToken {
     fn default() -> Self {
         Self::new()
@@ -746,6 +760,7 @@ fn classify_diagnostic_event_kind(message: &str) -> DynamicTraceEventKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_debug_env_storage_tracking() {
@@ -777,12 +792,17 @@ mod tests {
     fn rejects_non_tuple_type_name() {
         assert_eq!(tuple_arity_from_type_name("Option<U32>"), None);
     }
-}
+
+    #[test]
     fn tuple_arity_counts_top_level_types() {
         assert_eq!(tuple_arity_from_type_name("Tuple<U32, Symbol>"), Some(2));
         assert_eq!(
             tuple_arity_from_type_name("Tuple<U32, Option<Vec<Symbol>>, Map<U32, String>>"),
             Some(3)
+        );
+    }
+
+    #[test]
     fn test_debug_env_function_call_tracking() {
         let mut debug_env = DebugEnv::new();
 

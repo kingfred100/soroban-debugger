@@ -480,17 +480,40 @@ impl DebugServer {
                     if let Some(count) = self.repeat_count {
                         if count > 1 {
                             if let Some(wasm) = &self.contract_wasm {
-                                let breakpoints = self.engine.as_ref().map(|e| e.breakpoints().list()).unwrap_or_default();
-                                let initial_storage = self.engine.as_ref().and_then(|e| e.executor().get_storage_snapshot().ok()).and_then(|s| serde_json::to_string(&s).ok());
-                                let runner = crate::repeat::RepeatRunner::new(wasm.clone(), breakpoints, initial_storage);
+                                let breakpoints = self
+                                    .engine
+                                    .as_ref()
+                                    .map(|e| e.breakpoints().list())
+                                    .unwrap_or_default();
+                                let initial_storage = self
+                                    .engine
+                                    .as_ref()
+                                    .and_then(|e| e.executor().get_storage_snapshot().ok())
+                                    .and_then(|s| serde_json::to_string(&s).ok());
+                                let runner = crate::repeat::RepeatRunner::new(
+                                    wasm.clone(),
+                                    breakpoints,
+                                    initial_storage,
+                                );
                                 match runner.run(&function, args.as_deref(), count) {
                                     Ok(stats) => {
-                                        let output = format!("--- Repeat Execution ({} runs) ---\n\nDuration:\n  Min: {:.2}ms, Max: {:.2}ms, Avg: {:.2}ms\n\nCPU Instructions:\n  Min: {}, Max: {}, Avg: {}\n\nMemory (bytes):\n  Min: {}, Max: {}, Avg: {}\n\nResults: {}", 
-                                            count, 
-                                            stats.min_duration.as_secs_f64()*1000.0, stats.max_duration.as_secs_f64()*1000.0, stats.avg_duration.as_secs_f64()*1000.0,
-                                            stats.min_cpu, stats.max_cpu, stats.avg_cpu,
-                                            stats.min_memory, stats.max_memory, stats.avg_memory,
-                                            if stats.inconsistent_results { "INCONSISTENT" } else { "CONSISTENT" }
+                                        let output = format!(
+                                            "--- Repeat Execution ({} runs) ---\n\nDuration:\n  Min: {:.2}ms, Max: {:.2}ms, Avg: {:.2}ms\n\nCPU Instructions:\n  Min: {}, Max: {}, Avg: {}\n\nMemory (bytes):\n  Min: {}, Max: {}, Avg: {}\n\nResults: {}",
+                                            count,
+                                            stats.min_duration.as_secs_f64() * 1000.0,
+                                            stats.max_duration.as_secs_f64() * 1000.0,
+                                            stats.avg_duration.as_secs_f64() * 1000.0,
+                                            stats.min_cpu,
+                                            stats.max_cpu,
+                                            stats.avg_cpu,
+                                            stats.min_memory,
+                                            stats.max_memory,
+                                            stats.avg_memory,
+                                            if stats.inconsistent_results {
+                                                "INCONSISTENT"
+                                            } else {
+                                                "CONSISTENT"
+                                            }
                                         );
                                         let resp = DebugResponse::ExecutionResult {
                                             success: true,
@@ -504,15 +527,108 @@ impl DebugServer {
                                         continue;
                                     }
                                     Err(e) => {
-                                        let resp = DebugResponse::Error { message: e.to_string() };
+                                        let resp = DebugResponse::Error {
+                                            message: e.to_string(),
+                                        };
                                         send_msg(DebugMessage::response(message.id, resp))?;
                                         continue;
                                     }
                                 }
-                                Err(e) => DebugResponse::Error { message: e.to_string() },
+                            } else {
+                                DebugResponse::Error {
+                                    message: "No contract loaded for repeat execution".to_string(),
+                                }
                             }
                         } else {
-                            DebugResponse::Error { message: "No contract loaded for repeat execution".to_string() }
+                            match self.engine.as_mut() {
+                                Some(engine) => {
+                                    if engine.breakpoints().should_break(&function) {
+                                        match current_storage(engine) {
+                                            Ok(storage) => match engine.breakpoints_mut().on_hit(
+                                                &function,
+                                                &storage,
+                                                args.as_deref(),
+                                            ) {
+                                                Ok(Some(hit)) => {
+                                                    for message in hit.log_messages {
+                                                        println!("{message}");
+                                                    }
+                                                    if hit.should_pause {
+                                                        engine.prepare_breakpoint_stop(
+                                                            &function,
+                                                            args.as_deref(),
+                                                        );
+                                                        self.pending_execution =
+                                                            Some(PendingExecution {
+                                                                function: function.clone(),
+                                                                args: args.clone(),
+                                                            });
+                                                        DebugResponse::ExecutionResult {
+                                                            success: true,
+                                                            output: "Paused at function breakpoint"
+                                                                .to_string(),
+                                                            error: None,
+                                                            paused: true,
+                                                            completed: false,
+                                                            source_location: engine
+                                                                .current_source_location()
+                                                                .map(Into::into),
+                                                        }
+                                                    } else {
+                                                        is_executing.store(
+                                                            true,
+                                                            std::sync::atomic::Ordering::SeqCst,
+                                                        );
+                                                        let resp = execute_without_breakpoints(
+                                                            engine, &function, args,
+                                                        );
+                                                        is_executing.store(
+                                                            false,
+                                                            std::sync::atomic::Ordering::SeqCst,
+                                                        );
+                                                        resp
+                                                    }
+                                                }
+                                                Ok(None) => {
+                                                    is_executing.store(
+                                                        true,
+                                                        std::sync::atomic::Ordering::SeqCst,
+                                                    );
+                                                    let resp = execute_without_breakpoints(
+                                                        engine, &function, args,
+                                                    );
+                                                    is_executing.store(
+                                                        false,
+                                                        std::sync::atomic::Ordering::SeqCst,
+                                                    );
+                                                    resp
+                                                }
+                                                Err(e) => DebugResponse::Error {
+                                                    message: e.to_string(),
+                                                },
+                                            },
+                                            Err(e) => DebugResponse::Error {
+                                                message: e.to_string(),
+                                            },
+                                        }
+                                    } else {
+                                        is_executing.store(
+                                            true,
+                                            std::sync::atomic::Ordering::SeqCst,
+                                        );
+                                        let resp =
+                                            execute_without_breakpoints(engine, &function, args);
+                                        is_executing.store(
+                                            false,
+                                            std::sync::atomic::Ordering::SeqCst,
+                                        );
+                                        resp
+                                    }
+                                }
+                                None => DebugResponse::Error {
+                                    message: "No contract engine initialized".to_string(),
+                                },
+                            }
                         }
                     } else {
                         match self.engine.as_mut() {
@@ -568,17 +684,7 @@ impl DebugServer {
                             },
                         }
                     }
-                    Some(engine) => {
-                        is_executing.store(true, std::sync::atomic::Ordering::SeqCst);
-                        let r = execute_without_breakpoints(engine, &function, args);
-                        is_executing.store(false, std::sync::atomic::Ordering::SeqCst);
-                        r
-                    }
-                    None => DebugResponse::Error {
-                        message: "No contract loaded".to_string(),
-                    },
-                }
-            },
+                },
                 DebugRequest::Step | DebugRequest::StepIn => match self.engine.as_mut() {
                     Some(engine) => match engine.step_into() {
                         Ok(_) => {
