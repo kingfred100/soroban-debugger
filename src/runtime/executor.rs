@@ -9,6 +9,7 @@
 //! - [`super::result`]  â€” Result types and formatting helpers.
 
 use crate::inspector::budget::MemorySummary;
+use crate::output::InvocationReason;
 use crate::runtime::env::DebugEnv;
 use crate::runtime::mocking::{MockCallLogEntry, MockContractDispatcher, MockRegistry};
 use crate::server::protocol::{DynamicTraceEvent, DynamicTraceEventKind};
@@ -127,7 +128,8 @@ impl ContractExecutor {
         // Track function call entry
         let contract_addr_str = format!("{:?}", self.contract_address);
         let arg_strings: Vec<String> = parsed_args.iter().map(|val| format!("{:?}", val)).collect();
-        self.debug_env.enter_function(&contract_addr_str, function);
+        self.debug_env
+            .enter_function(&contract_addr_str, function, InvocationReason::Entrypoint);
 
         // 3. Invoke and capture the result.
         let storage_fn = || self.get_storage_snapshot();
@@ -139,6 +141,7 @@ impl ContractExecutor {
             &self.contract_address,
             &self.error_db,
             function,
+            InvocationReason::Entrypoint,
             parsed_args,
             self.timeout_secs,
             storage_fn,
@@ -154,6 +157,7 @@ impl ContractExecutor {
         self.debug_env.record_function_call(
             &contract_addr_str,
             function,
+            InvocationReason::Entrypoint,
             arg_strings,
             Some(result_str),
             None::<&str>,
@@ -808,10 +812,15 @@ mod tests {
     fn test_debug_env_function_call_tracking() {
         let mut debug_env = DebugEnv::new();
 
-        debug_env.enter_function("contract", "transfer");
+        debug_env.enter_function(
+            "contract",
+            "transfer",
+            crate::output::InvocationReason::Entrypoint,
+        );
         debug_env.record_function_call(
             "contract",
             "transfer",
+            crate::output::InvocationReason::Entrypoint,
             vec!["alice".to_string(), "bob".to_string(), "100".to_string()],
             Some("success"),
             None::<&str>,
@@ -829,11 +838,20 @@ mod tests {
         let mut debug_env = DebugEnv::new();
 
         // Simulate nested call: transfer -> mint
-        debug_env.enter_function("contract", "transfer");
-        debug_env.enter_function("transfer", "mint");
+        debug_env.enter_function(
+            "contract",
+            "transfer",
+            crate::output::InvocationReason::Entrypoint,
+        );
+        debug_env.enter_function(
+            "transfer",
+            "mint",
+            crate::output::InvocationReason::CrossContract,
+        );
         debug_env.record_function_call(
             "transfer",
             "mint",
+            crate::output::InvocationReason::CrossContract,
             vec!["100".to_string()],
             Some("ok"),
             None::<&str>,
@@ -843,6 +861,7 @@ mod tests {
         debug_env.record_function_call(
             "contract",
             "transfer",
+            crate::output::InvocationReason::Entrypoint,
             vec![],
             Some("complete"),
             None::<&str>,

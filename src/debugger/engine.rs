@@ -3,6 +3,7 @@ use crate::debugger::instruction_pointer::StepMode;
 use crate::debugger::source_map::{SourceLocation, SourceMap};
 use crate::debugger::state::DebugState;
 use crate::debugger::stepper::Stepper;
+use crate::output::InvocationReason;
 use crate::plugin::{EventContext, ExecutionEvent};
 use crate::runtime::executor::ContractExecutor;
 use crate::runtime::instruction::Instruction;
@@ -251,7 +252,11 @@ impl DebuggerEngine {
         self.paused = false;
 
         if let Ok(mut state) = self.state.lock() {
-            state.set_current_function(function.to_string(), args.map(str::to_string));
+            state.set_current_function(
+                function.to_string(),
+                args.map(str::to_string),
+                Some(InvocationReason::Entrypoint),
+            );
             state.call_stack_mut().clear();
             state.call_stack_mut().push(function.to_string(), None);
         }
@@ -326,7 +331,11 @@ impl DebuggerEngine {
 
     pub fn prepare_breakpoint_stop(&mut self, function: &str, args: Option<&str>) {
         if let Ok(mut state) = self.state.lock() {
-            state.set_current_function(function.to_string(), args.map(str::to_string));
+            state.set_current_function(
+                function.to_string(),
+                args.map(str::to_string),
+                Some(InvocationReason::Entrypoint),
+            );
             state.call_stack_mut().clear();
             state.call_stack_mut().push(function.to_string(), None);
         }
@@ -361,7 +370,11 @@ impl DebuggerEngine {
     /// emitting a breakpoint log event.
     pub fn stage_execution(&mut self, function: &str, args: Option<&str>) {
         if let Ok(mut state) = self.state.lock() {
-            state.set_current_function(function.to_string(), args.map(str::to_string));
+            state.set_current_function(
+                function.to_string(),
+                args.map(str::to_string),
+                Some(InvocationReason::Entrypoint),
+            );
             state.call_stack_mut().clear();
             state.call_stack_mut().push(function.to_string(), None);
         }
@@ -564,7 +577,11 @@ impl DebuggerEngine {
         self.paused = true;
 
         if let Ok(mut state) = self.state.lock() {
-            state.set_current_function(function.to_string(), None);
+            state.set_current_function(
+                function.to_string(),
+                None,
+                Some(InvocationReason::Entrypoint),
+            );
             state.call_stack().display();
         }
 

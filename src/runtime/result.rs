@@ -5,6 +5,7 @@
 //! and instruction-level profiling data.
 
 use crate::inspector::budget::BudgetInfo;
+use crate::output::InvocationReason;
 use soroban_env_host::xdr::ScVal;
 use soroban_env_host::{ConversionError, TryFromVal};
 use soroban_sdk::{InvokeError, Val};
@@ -17,6 +18,7 @@ pub use crate::runtime::mocking::MockCallLogEntry as MockCallEntry;
 #[derive(Debug, Clone)]
 pub struct ExecutionRecord {
     pub function: String,
+    pub invocation_reason: InvocationReason,
     pub args: Vec<ScVal>,
     pub result: std::result::Result<ScVal, String>,
     pub budget: BudgetInfo,

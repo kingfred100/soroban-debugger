@@ -23,6 +23,7 @@ pub struct StorageAccess {
 pub struct FunctionCallMetadata {
     pub caller: String,
     pub callee: String,
+    pub invocation_reason: crate::output::InvocationReason,
     pub arguments: Vec<String>,
     pub timestamp: u128,
     pub sequence: usize,
@@ -65,12 +66,14 @@ impl DebugEnv {
         &mut self,
         kind: crate::server::protocol::DynamicTraceEventKind,
         message: String,
+        invocation_reason: Option<crate::output::InvocationReason>,
     ) {
         let event = crate::server::protocol::DynamicTraceEvent {
             sequence: self.operation_sequence,
             kind,
             message,
             call_depth: Some(self.call_depth as u64),
+            invocation_reason,
             ..Default::default()
         };
         self.dynamic_events.push(event);
@@ -83,6 +86,7 @@ impl DebugEnv {
         self.record_event(
             crate::server::protocol::DynamicTraceEventKind::StorageRead,
             format!("Read: {}", key_str),
+            None,
         );
         let access = StorageAccess {
             access_type: StorageAccessType::Read,
@@ -106,6 +110,7 @@ impl DebugEnv {
         self.record_event(
             crate::server::protocol::DynamicTraceEventKind::StorageWrite,
             format!("Write: {} = {}", key_str, value_str),
+            None,
         );
         let access = StorageAccess {
             access_type: StorageAccessType::Write,
@@ -123,12 +128,18 @@ impl DebugEnv {
     }
 
     /// Record the start of a function call
-    pub fn enter_function(&mut self, caller: impl Into<String>, callee: impl Into<String>) {
+    pub fn enter_function(
+        &mut self,
+        caller: impl Into<String>,
+        callee: impl Into<String>,
+        invocation_reason: crate::output::InvocationReason,
+    ) {
         let caller_str = caller.into();
         let callee_str = callee.into();
         self.record_event(
             crate::server::protocol::DynamicTraceEventKind::FunctionCall,
             format!("Call: {} -> {}", caller_str, callee_str),
+            Some(invocation_reason),
         );
         self.call_depth += 1;
     }
@@ -138,6 +149,7 @@ impl DebugEnv {
         &mut self,
         caller: impl Into<String>,
         callee: impl Into<String>,
+        invocation_reason: crate::output::InvocationReason,
         arguments: Vec<String>,
         result: Option<impl Into<String>>,
         error: Option<impl Into<String>>,
@@ -151,11 +163,13 @@ impl DebugEnv {
                 "Return: {}",
                 res_str.as_deref().or(err_str.as_deref()).unwrap_or("void")
             ),
+            Some(invocation_reason),
         );
 
         let call = FunctionCallMetadata {
             caller: caller.into(),
             callee: callee.into(),
+            invocation_reason,
             arguments,
             timestamp: Self::current_timestamp(),
             sequence: self.operation_sequence - 1,
@@ -342,10 +356,15 @@ mod tests {
     #[test]
     fn test_record_function_call() {
         let mut env = DebugEnv::new();
-        env.enter_function("main", "transfer");
+        env.enter_function(
+            "main",
+            "transfer",
+            crate::output::InvocationReason::Entrypoint,
+        );
         env.record_function_call(
             "main",
             "transfer",
+            crate::output::InvocationReason::Entrypoint,
             vec!["alice".to_string(), "bob".to_string(), "100".to_string()],
             Some("success"),
             None::<&str>,
@@ -354,6 +373,10 @@ mod tests {
         assert_eq!(env.function_call_count(), 1);
         let calls = &env.function_calls;
         assert_eq!(calls[0].callee, "transfer");
+        assert_eq!(
+            calls[0].invocation_reason,
+            crate::output::InvocationReason::Entrypoint
+        );
         assert_eq!(calls[0].arguments.len(), 3);
         assert_eq!(calls[0].result, Some("success".to_string()));
         assert_eq!(calls[0].error, None);
@@ -362,10 +385,15 @@ mod tests {
     #[test]
     fn test_function_call_with_error() {
         let mut env = DebugEnv::new();
-        env.enter_function("main", "transfer");
+        env.enter_function(
+            "main",
+            "transfer",
+            crate::output::InvocationReason::Entrypoint,
+        );
         env.record_function_call(
             "main",
             "transfer",
+            crate::output::InvocationReason::Entrypoint,
             vec!["alice".to_string(), "bob".to_string()],
             None::<&str>,
             Some("insufficient balance"),
@@ -380,20 +408,43 @@ mod tests {
     fn test_get_function_calls_for() {
         let mut env = DebugEnv::new();
 
-        env.enter_function("main", "transfer");
-        env.record_function_call("main", "transfer", vec![], None::<&str>, None::<&str>);
+        env.enter_function(
+            "main",
+            "transfer",
+            crate::output::InvocationReason::Entrypoint,
+        );
+        env.record_function_call(
+            "main",
+            "transfer",
+            crate::output::InvocationReason::Entrypoint,
+            vec![],
+            None::<&str>,
+            None::<&str>,
+        );
 
-        env.enter_function("main", "mint");
+        env.enter_function("main", "mint", crate::output::InvocationReason::Entrypoint);
         env.record_function_call(
             "main",
             "mint",
+            crate::output::InvocationReason::Entrypoint,
             vec!["100".to_string()],
             None::<&str>,
             None::<&str>,
         );
 
-        env.enter_function("main", "transfer");
-        env.record_function_call("main", "transfer", vec![], None::<&str>, None::<&str>);
+        env.enter_function(
+            "main",
+            "transfer",
+            crate::output::InvocationReason::Entrypoint,
+        );
+        env.record_function_call(
+            "main",
+            "transfer",
+            crate::output::InvocationReason::Entrypoint,
+            vec![],
+            None::<&str>,
+            None::<&str>,
+        );
 
         let transfers = env.get_function_calls_for("transfer");
         assert_eq!(transfers.len(), 2);
@@ -406,13 +457,28 @@ mod tests {
 
         assert_eq!(env.current_call_depth(), 0);
 
-        env.enter_function("main", "level1");
+        env.enter_function(
+            "main",
+            "level1",
+            crate::output::InvocationReason::Entrypoint,
+        );
         assert_eq!(env.current_call_depth(), 1);
 
-        env.enter_function("level1", "level2");
+        env.enter_function(
+            "level1",
+            "level2",
+            crate::output::InvocationReason::CrossContract,
+        );
         assert_eq!(env.current_call_depth(), 2);
 
-        env.record_function_call("level1", "level2", vec![], None::<&str>, None::<&str>);
+        env.record_function_call(
+            "level1",
+            "level2",
+            crate::output::InvocationReason::CrossContract,
+            vec![],
+            None::<&str>,
+            None::<&str>,
+        );
         assert_eq!(env.current_call_depth(), 1);
     }
 
@@ -420,7 +486,14 @@ mod tests {
     fn test_clear() {
         let mut env = DebugEnv::new();
         env.track_storage_read("key1");
-        env.record_function_call("main", "test", vec![], None::<&str>, None::<&str>);
+        env.record_function_call(
+            "main",
+            "test",
+            crate::output::InvocationReason::Entrypoint,
+            vec![],
+            None::<&str>,
+            None::<&str>,
+        );
 
         assert!(env.storage_access_count() > 0);
         assert!(env.function_call_count() > 0);
@@ -436,8 +509,15 @@ mod tests {
         let mut env = DebugEnv::new();
         env.track_storage_read("key1");
         env.track_storage_write("key2", "value");
-        env.enter_function("main", "test");
-        env.record_function_call("main", "test", vec![], None::<&str>, None::<&str>);
+        env.enter_function("main", "test", crate::output::InvocationReason::Entrypoint);
+        env.record_function_call(
+            "main",
+            "test",
+            crate::output::InvocationReason::Entrypoint,
+            vec![],
+            None::<&str>,
+            None::<&str>,
+        );
 
         // track_storage_* / enter_function / record_function_call all increment the sequence.
         assert_eq!(env.operation_count(), 4);

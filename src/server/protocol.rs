@@ -107,6 +107,8 @@ pub struct DynamicTraceEvent {
     /// Actor address associated with this event (e.g., the address being authorized).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub address: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invocation_reason: Option<crate::output::InvocationReason>,
 }
 
 /// Source location information (file, line, column)

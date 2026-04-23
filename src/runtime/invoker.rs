@@ -8,6 +8,7 @@
 
 use crate::debugger::error_db::ErrorDatabase;
 use crate::inspector::budget::{BudgetInspector, MemoryTracker};
+use crate::output::InvocationReason;
 use crate::runtime::result::{format_invocation_result, ExecutionRecord};
 use crate::{DebuggerError, Result};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -24,6 +25,7 @@ pub fn invoke_function(
     contract_address: &Address,
     error_db: &ErrorDatabase,
     function: &str,
+    invocation_reason: InvocationReason,
     parsed_args: Vec<Val>,
     _timeout_secs: u64,
     storage_fn: impl Fn() -> Result<HashMap<String, String>>,
@@ -99,6 +101,7 @@ pub fn invoke_function(
 
     let record = ExecutionRecord {
         function: function.to_string(),
+        invocation_reason,
         args: sc_args,
         result: record_result,
         budget: execution_budget,

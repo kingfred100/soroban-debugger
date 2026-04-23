@@ -28,6 +28,26 @@ pub enum PluginIncidentType {
     Timeout,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InvocationReason {
+    Entrypoint,
+    CrossContract,
+    Replay,
+    Plugin,
+}
+
+impl InvocationReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Entrypoint => "entrypoint",
+            Self::CrossContract => "cross_contract",
+            Self::Replay => "replay",
+            Self::Plugin => "plugin",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct PluginIncidentReport {
     pub plugin: String,
