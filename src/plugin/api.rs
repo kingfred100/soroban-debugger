@@ -2,7 +2,6 @@ use super::events::{EventContext, ExecutionEvent};
 use super::manifest::PluginManifest;
 use std::any::Any;
 
-/// Result type for plugin operations
 pub type PluginResult<T> = Result<T, PluginError>;
 
 /// Errors that can occur during plugin operations
@@ -31,9 +30,38 @@ pub enum PluginError {
     /// Dependency error
     #[error("Dependency error: {0}")]
     DependencyError(String),
+
+    /// Trust policy violation
+    #[error("Plugin trust policy violation: {0}")]
+    TrustViolation(String),
+
+    /// Plugin execution timed out under containment policy
+    #[error("Plugin timeout: {0}")]
+    Timeout(String),
+
+    /// Plugin has been temporarily disabled by the circuit breaker
+    #[error("Plugin circuit breaker open: {0}")]
+    CircuitOpen(String),
+
+    /// Plugin panicked; the core debugger contained the failure
+    #[error("Plugin '{plugin}' panicked during {operation}: {details}")]
+    Panic {
+        plugin: String,
+        operation: String,
+        details: String,
+    },
+
+    /// Plugin has been disabled for the current session after an incident
+    #[error("Plugin '{plugin}' disabled for current session: {reason}")]
+    SessionDisabled { plugin: String, reason: String },
 }
 
-/// Custom CLI command that a plugin can provide
+/// Custom CLI command that a plugin can provide.
+///
+/// Plugin command names are matched case-insensitively and normalized by
+/// trimming whitespace. Conflicts between plugins are resolved deterministically
+/// by plugin name precedence, and collisions are exposed through the plugin
+/// registry.
 #[derive(Debug, Clone)]
 pub struct PluginCommand {
     /// Command name
@@ -46,7 +74,11 @@ pub struct PluginCommand {
     pub arguments: Vec<(String, String, bool)>,
 }
 
-/// Custom output formatter that a plugin can provide
+/// Custom output formatter that a plugin can provide.
+///
+/// Formatter names are matched case-insensitively and normalized by trimming
+/// whitespace. If multiple plugins provide the same formatter, a deterministic
+/// winner is chosen and the conflict is recorded.
 #[derive(Debug, Clone)]
 pub struct OutputFormatter {
     /// Formatter name
@@ -155,6 +187,15 @@ pub trait InspectorPlugin: Send + Sync {
 ///
 /// Every plugin shared library must export a function with this name
 /// that returns a boxed instance of the plugin.
+/// Current version of the plugin API
+pub const PLUGIN_API_VERSION: u32 = 1;
+
+/// Symbol name for the plugin API version function
+pub const PLUGIN_VERSION_SYMBOL: &str = "plugin_api_version";
+
+/// Type of the plugin API version function
+pub type PluginVersionFn = unsafe fn() -> u32;
+
 pub const PLUGIN_CONSTRUCTOR_SYMBOL: &str = "create_plugin";
 
 /// Type of the plugin constructor function
@@ -191,6 +232,7 @@ mod tests {
             },
             library: "test.so".to_string(),
             dependencies: vec![],
+            signature: None,
         };
 
         let plugin = TestPlugin {

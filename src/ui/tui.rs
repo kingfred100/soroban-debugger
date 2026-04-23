@@ -1,5 +1,5 @@
 use crate::debugger::engine::DebuggerEngine;
-use crate::inspector::{BudgetInspector, StorageInspector};
+use crate::inspector::BudgetInspector;
 use crate::Result;
 use std::io::{self, Write};
 
@@ -12,7 +12,6 @@ struct PendingExecution {
 /// Terminal user interface for interactive debugging.
 pub struct DebuggerUI {
     engine: DebuggerEngine,
-    storage_inspector: StorageInspector,
     pending_execution: Option<PendingExecution>,
     last_output: Option<String>,
     last_error: Option<String>,
@@ -22,7 +21,6 @@ impl DebuggerUI {
     pub fn new(engine: DebuggerEngine) -> Result<Self> {
         Ok(Self {
             engine,
-            storage_inspector: StorageInspector::new(),
             pending_execution: None,
             last_output: None,
             last_error: None,
@@ -54,12 +52,12 @@ impl DebuggerUI {
         loop {
             print!("\n(debug) ");
             io::stdout().flush().map_err(|e| {
-                crate::DebuggerError::FileError(format!("Failed to flush stdout: {}", e))
+                crate::DebuggerError::IoError(format!("Failed to flush stdout: {}", e))
             })?;
 
             let mut input = String::new();
             io::stdin().read_line(&mut input).map_err(|e| {
-                crate::DebuggerError::FileError(format!("Failed to read line: {}", e))
+                crate::DebuggerError::IoError(format!("Failed to read line: {}", e))
             })?;
 
             let command = input.trim();
@@ -132,7 +130,22 @@ impl DebuggerUI {
                 } else {
                     let function = parts[1].to_string();
                     let args = if parts.len() > 2 {
-                        Some(parts[2..].join(" "))
+                        // Extract raw arguments from the original command string
+                        // to preserve internal whitespace and quotes.
+                        let mut current_pos = 0;
+                        // Skip "run" and function name tokens in the original string.
+                        let tokens = [parts[0], parts[1]];
+                        for token in tokens {
+                            if let Some(pos) = command[current_pos..].find(token) {
+                                current_pos += pos + token.len();
+                            }
+                        }
+                        let raw_args = command[current_pos..].trim();
+                        if raw_args.is_empty() {
+                            None
+                        } else {
+                            Some(raw_args.to_string())
+                        }
                     } else {
                         None
                     };
@@ -140,11 +153,13 @@ impl DebuggerUI {
                 }
             }
             "storage" => {
-                self.storage_inspector.display();
+                self.display_storage()?;
             }
             "stack" => {
                 if let Ok(state) = self.engine.state().lock() {
-                    state.call_stack().display();
+                    crate::inspector::CallStackInspector::display_frames(
+                        state.call_stack().get_stack(),
+                    );
                 }
             }
             "budget" => {
@@ -154,12 +169,12 @@ impl DebuggerUI {
                 if parts.len() < 2 {
                     tracing::warn!("breakpoint set without function name");
                 } else {
-                    self.engine.breakpoints_mut().add(parts[1]);
+                    self.engine.breakpoints_mut().add_simple(parts[1]);
                     crate::logging::log_breakpoint_set(parts[1]);
                 }
             }
             "list-breaks" => {
-                let breakpoints = self.engine.breakpoints_mut().list();
+                let breakpoints = self.engine.breakpoints_mut().list_detailed();
                 if breakpoints.is_empty() {
                     crate::logging::log_display(
                         "No breakpoints set",
@@ -167,8 +182,13 @@ impl DebuggerUI {
                     );
                 } else {
                     for bp in breakpoints {
+                        let cond_str = bp
+                            .condition
+                            .clone()
+                            .map(|c| format!(" (if {:?})", c))
+                            .unwrap_or_default();
                         crate::logging::log_display(
-                            format!("- {}", bp),
+                            format!("- {}{}", bp.function, cond_str),
                             crate::logging::LogLevel::Info,
                         );
                     }
@@ -177,7 +197,7 @@ impl DebuggerUI {
             "clear" => {
                 if parts.len() < 2 {
                     tracing::warn!("clear command missing function name");
-                } else if self.engine.breakpoints_mut().remove(parts[1]) {
+                } else if self.engine.breakpoints_mut().remove_function(parts[1]) {
                     crate::logging::log_breakpoint_cleared(parts[1]);
                 } else {
                     tracing::debug!(breakpoint = parts[1], "No breakpoint found at function");
@@ -225,10 +245,36 @@ impl DebuggerUI {
                 );
             }
             crate::logging::log_display("", crate::logging::LogLevel::Info);
-            state.call_stack().display();
+            crate::inspector::CallStackInspector::display_frames(state.call_stack().get_stack());
         } else {
             crate::logging::log_display("State unavailable", crate::logging::LogLevel::Info);
         }
+    }
+
+    fn display_storage(&self) -> Result<()> {
+        let entries = self.engine.executor().get_storage_snapshot()?;
+
+        if entries.is_empty() {
+            crate::logging::log_display("Storage is empty", crate::logging::LogLevel::Warn);
+            return Ok(());
+        }
+
+        crate::logging::log_display("", crate::logging::LogLevel::Info);
+        crate::logging::log_display("=== Contract Storage ===", crate::logging::LogLevel::Info);
+        crate::logging::log_display("", crate::logging::LogLevel::Info);
+
+        let mut items: Vec<_> = entries.iter().collect();
+        items.sort_by_key(|(ka, _)| *ka);
+
+        for (key, value) in items {
+            crate::logging::log_display(
+                format!("  {}: {}", key, value),
+                crate::logging::LogLevel::Info,
+            );
+        }
+        crate::logging::log_display("", crate::logging::LogLevel::Info);
+
+        Ok(())
     }
 
     fn print_help(&self) {
@@ -253,7 +299,7 @@ impl DebuggerUI {
             crate::logging::LogLevel::Info,
         );
         crate::logging::log_display(
-            "  storage            Show tracked storage view",
+            "  storage            Show current contract storage",
             crate::logging::LogLevel::Info,
         );
         crate::logging::log_display(
@@ -265,7 +311,7 @@ impl DebuggerUI {
             crate::logging::LogLevel::Info,
         );
         crate::logging::log_display(
-            "  break <func>       Set breakpoint",
+            "  break <func> [cond] Set breakpoint with optional condition",
             crate::logging::LogLevel::Info,
         );
         crate::logging::log_display(

@@ -445,29 +445,29 @@ pub fn run_dashboard(engine: DebuggerEngine, function_name: &str) -> Result<()> 
     }
     // Setup terminal
     enable_raw_mode()
-        .map_err(|e| DebuggerError::FileError(format!("Failed to enable raw mode: {}", e)))?;
+        .map_err(|e| DebuggerError::IoError(format!("Failed to enable raw mode: {}", e)))?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture).map_err(|e| {
-        DebuggerError::FileError(format!("Failed to execute terminal command: {}", e))
+        DebuggerError::IoError(format!("Failed to execute terminal command: {}", e))
     })?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)
-        .map_err(|e| DebuggerError::FileError(format!("Failed to create terminal: {}", e)))?;
+        .map_err(|e| DebuggerError::IoError(format!("Failed to create terminal: {}", e)))?;
 
     let res = run_app(&mut terminal, engine, function_name);
 
     // Restore terminal
     disable_raw_mode()
-        .map_err(|e| DebuggerError::FileError(format!("Failed to disable raw mode: {}", e)))?;
+        .map_err(|e| DebuggerError::IoError(format!("Failed to disable raw mode: {}", e)))?;
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
         DisableMouseCapture
     )
-    .map_err(|e| DebuggerError::FileError(format!("Failed to execute terminal command: {}", e)))?;
+    .map_err(|e| DebuggerError::IoError(format!("Failed to execute terminal command: {}", e)))?;
     terminal
         .show_cursor()
-        .map_err(|e| DebuggerError::FileError(format!("Failed to show cursor: {}", e)))?;
+        .map_err(|e| DebuggerError::IoError(format!("Failed to show cursor: {}", e)))?;
 
     if let Err(err) = res {
         tracing::error!("TUI error: {:?}", err);
@@ -481,14 +481,14 @@ fn run_dashboard_smoke(engine: DebuggerEngine, function_name: &str) -> Result<()
 
     let backend = TestBackend::new(120, 40);
     let mut terminal = Terminal::new(backend)
-        .map_err(|e| DebuggerError::FileError(format!("Failed to create terminal: {}", e)))?;
+        .map_err(|e| DebuggerError::IoError(format!("Failed to create terminal: {}", e)))?;
 
     let mut app = DashboardApp::new(engine, function_name.to_string());
     app.do_continue();
 
     terminal
         .draw(|f| ui(f, &mut app))
-        .map_err(|e| DebuggerError::FileError(format!("Failed to draw terminal: {}", e)))?;
+        .map_err(|e| DebuggerError::IoError(format!("Failed to draw terminal: {}", e)))?;
 
     Ok(())
 }
@@ -505,17 +505,17 @@ fn run_app<B: ratatui::backend::Backend>(
     loop {
         terminal
             .draw(|f| ui(f, &mut app))
-            .map_err(|e| DebuggerError::FileError(format!("Failed to draw terminal: {}", e)))?;
+            .map_err(|e| DebuggerError::IoError(format!("Failed to draw terminal: {}", e)))?;
 
         let timeout = tick_rate
             .checked_sub(last_tick.elapsed())
             .unwrap_or_default();
 
         if event::poll(timeout)
-            .map_err(|e| DebuggerError::FileError(format!("Failed to poll event: {}", e)))?
+            .map_err(|e| DebuggerError::IoError(format!("Failed to poll event: {}", e)))?
         {
             if let Event::Key(key) = event::read()
-                .map_err(|e| DebuggerError::FileError(format!("Failed to read event: {}", e)))?
+                .map_err(|e| DebuggerError::IoError(format!("Failed to read event: {}", e)))?
             {
                 // Ctrl-C always exits
                 if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('c') {
@@ -741,6 +741,22 @@ fn render_execution(f: &mut Frame, app: &mut DashboardApp, area: Rect) {
             Span::styled(arg_text, Style::default().fg(COLOR_TEXT)),
         ]),
     ];
+
+    // Show paused file/line if available
+    if paused {
+        if let Some(loc) = app.engine.current_source_location() {
+            let file = loc.file.display();
+            let line = loc.line;
+            let col = loc.column.map(|c| format!(":{}", c)).unwrap_or_default();
+            lines.push(Line::from(vec![
+                Span::styled("Paused at: ", Style::default().fg(COLOR_TEXT_DIM)),
+                Span::styled(
+                    format!("{}:{}{}", file, line, col),
+                    Style::default().fg(COLOR_YELLOW),
+                ),
+            ]));
+        }
+    }
 
     if let Some(result) = &app.last_result {
         lines.push(Line::from(vec![
