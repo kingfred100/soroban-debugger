@@ -13,13 +13,7 @@ fn main() {
 
     let analyzer = SecurityAnalyzer::new();
     let filter = AnalyzerFilter::default();
-    match analyzer.analyze(
-        &wasm_with_storage_loop,
-        None,
-        None,
-        &filter,
-        "test_loop.wasm",
-    ) {
+    match analyzer.analyze(&wasm_with_storage_loop, None, None, &filter, "unbounded_test.wasm") {
         Ok(report) => {
             println!(
                 "Analysis complete. Found {} security issues.",

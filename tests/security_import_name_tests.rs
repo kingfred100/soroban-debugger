@@ -122,7 +122,7 @@ fn reentrancy_detection_handles_optional_function_metadata_with_depth() {
     let wasm = vec![0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00];
     let analyzer = SecurityAnalyzer::new();
     let trace = vec![
-        DynamicTraceEvent {
+        DynamicTraceEvent { invocation_reason: None, 
             sequence: 1,
             kind: DynamicTraceEventKind::CrossContractCall,
             message: "external call".to_string(),
@@ -134,7 +134,7 @@ fn reentrancy_detection_handles_optional_function_metadata_with_depth() {
             address: None,
             invocation_reason: None,
         },
-        DynamicTraceEvent {
+        DynamicTraceEvent { invocation_reason: None, 
             sequence: 2,
             kind: DynamicTraceEventKind::StorageWrite,
             message: "update state".to_string(),

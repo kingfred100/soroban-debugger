@@ -26,7 +26,8 @@ pub struct InvokeArgs<'a> {
 }
 
 /// Invoke `function` on the already-registered contract at `contract_address`.
-#[tracing::instrument(skip_all, fields(function = args.function))]
+#[allow(clippy::too_many_arguments)]
+#[tracing::instrument(skip_all, fields(function = function))]
 pub fn invoke_function(
     env: &Env,
     contract_address: &Address,
